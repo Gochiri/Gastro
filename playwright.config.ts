@@ -12,7 +12,13 @@ const executablePath = existsSync(CHROMIUM_LOCAL) ? CHROMIUM_LOCAL : undefined
 
 export default defineConfig({
   testDir: './e2e',
+  // Un solo worker, no negociable: las suites comparten UNA base de datos y
+  // varias la recrean en su beforeAll. `fullyParallel: false` solo serializa
+  // los tests dentro de cada archivo; sin `workers: 1`, Playwright corre
+  // archivos distintos en paralelo y dos procesos intentan crear la base a la
+  // vez ("duplicate key ... pg_database_datname_index").
   fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [['list']],

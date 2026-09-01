@@ -4,9 +4,10 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0, 1 y 2** completas. Se puede entrar, ver el catálogo de recetas
-costeado, importar el histórico de ventas desde un CSV y ver food cost, margen y
-**rentabilidad por canal** — con las comisiones de los agregadores descontadas.
+Estado: **fases 0 a 3** completas. Se puede costear el menú, importar el
+histórico de ventas, ver margen y rentabilidad por canal, y —lo que ningún Excel
+da— comparar lo que las recetas dicen que debió consumirse contra lo que
+realmente salió de la heladera.
 
 ## Puesta en marcha
 
@@ -37,6 +38,11 @@ npm test                # SQL + contexto de tenant + E2E
 | `npm run test:unit` | Parseo de importes LATAM y lectura del CSV, sin base de datos |
 | `npm run test:datos` | Importación completa y KPIs contra cálculo manual |
 | `npm run test:e2e` | Que la UI muestre los importes verificados y respete el aislamiento |
+
+Los archivos de test que tocan la base **recrean la base en su propio `before`** y
+corren en invocaciones separadas: `node --test` paraleliza archivos por defecto,
+y todos comparten un único Postgres. Por el mismo motivo `playwright.config.ts`
+fija `workers: 1`.
 
 ## Estructura
 
@@ -173,3 +179,52 @@ vacía, un producto desconocido y un descuento ilegible):
 El hallazgo que justifica la fase, también verificado a mano: una porción de
 lasaña deja $ 11.757,80 en salón y $ 7.965,07 por Rappi. La comisión se lleva
 $ 3.792,73 de cada porción.
+
+## La varianza de food cost
+
+El diferenciador. `varianza_periodo(conteo_inicial, conteo_final)` responde:
+
+```
+consumo real          = inventario inicial + compras − inventario final
+varianza              = consumo real − consumo teórico
+varianza sin explicar = varianza − mermas registradas
+```
+
+La última línea es la que importa: *"consumiste 2 kg de carne más de lo que dicen
+las recetas; 0,5 kg están anotados como merma; el resto no tiene explicación"*.
+
+**Decisiones que hacen que el número sirva:**
+
+- **Teórico y real se valúan al mismo precio unitario.** Valuando cada lado a su
+  propio precio, la varianza mezclaría *usar de más* con *pagar de más*, que son
+  problemas distintos con responsables distintos. Esto mide varianza de **uso**.
+- **El consumo teórico se calcula en cantidades brutas.** De la cámara sale el
+  kilo entero de papa, no los 800 g que quedan después de pelarla.
+- **Un insumo contado en un solo conteo queda fuera del informe.** Asumir cero en
+  el conteo que falta inventaría un faltante inexistente.
+- **Se permiten conteos parciales**, y la cobertura viaja siempre junto al
+  número: con el 74% del costo cubierto, el food cost real es una estimación y la
+  pantalla lo dice.
+- **El food cost teórico usa el mismo denominador que el dashboard de ventas.**
+  Dos pantallas con el mismo rótulo y distinto número destruyen la confianza en
+  ambas; hay un test que lo impide.
+
+### Cómo se verifica
+
+`scripts/escenario.mjs` monta un caso con un **faltante plantado**: importa las
+ventas con el importador real, crea los conteos, y hace desaparecer 2 kg de carne
+picada de los cuales 0,5 kg quedan registrados como merma.
+
+El consumo teórico se contrasta contra un cálculo hecho a mano desde las recetas:
+
+```
+Carne picada (merma 5%), ventas del período: 16 lasañas + 11 hamburguesas
+  Lasaña (rinde 8) -> Ragú 1500 ml de un lote de 3000 (factor 0,5)
+    1500 g netos x 0,5 / 0,95 = 789,4737 g por lote = 98,6842 por porción
+    x 16 porciones                                  = 1578,9474 g
+  Hamburguesa: 180 / 0,95 = 189,4737 x 11           = 2084,2105 g
+                                             TOTAL  = 3663,1579 g
+```
+
+El informe debe reportar exactamente: desvío 2.000 g, explicado 500 g, **sin
+explicar 1.500 g = $13.500**. Y lo hace.

@@ -65,3 +65,19 @@ npx playwright test     # E2E
    La cobertura de costeo va siempre junto al food cost.
 10. **Los importes de CSV pasan por `lib/numeros.ts`.** El formato se detecta por
     columna, nunca valor por valor.
+
+## Reglas de la fase de inventario
+
+11. **El consumo teórico se calcula en cantidades brutas**, con la merma de
+    limpieza aplicada: de la cámara sale el producto sin limpiar.
+12. **Teórico y real se valúan al mismo precio.** Mezclar precios convierte la
+    varianza de uso en una mezcla inútil de dos problemas distintos.
+13. **Un insumo contado en un solo conteo no entra al informe.**
+14. **Registrar una compra no toca `precios_insumo`.**
+
+## Tests: concurrencia
+
+Los tests comparten UN Postgres. `node --test` paraleliza archivos y Playwright
+paraleliza suites: ambos están forzados a serializar (`workers: 1`, invocaciones
+separadas por archivo). Cada archivo que escribe en la base la recrea en su
+`before`, así ninguno depende del orden.

@@ -1,4 +1,5 @@
 import { strict as assert } from 'node:assert'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import test, { before, after } from 'node:test'
 import pg from 'pg'
@@ -21,6 +22,13 @@ const CSV = readFileSync(new URL('../supabase/seed/ventas-ejemplo.csv', import.m
 /** Consulta como superusuario, para preparar y verificar sin pasar por RLS. */
 const admin = new pg.Pool({ connectionString: 'postgresql://postgres@localhost:5433/gastro' })
 const sql = async (texto, params = []) => (await admin.query(texto, params)).rows
+
+// Base propia: este archivo importa un CSV cuyo hash impide reimportarlo, así
+// que no puede correr sobre una base que ya lo tenga. Recrearla acá lo hace
+// independiente del orden en que se ejecuten los archivos de test.
+before(() => {
+  execFileSync('./scripts/db.sh', ['reset'], { stdio: 'pipe' })
+})
 
 after(async () => {
   await admin.end()

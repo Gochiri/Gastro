@@ -28,6 +28,15 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
             <Link href="/ventas" className="text-stone-600 hover:text-stone-900">
               Ventas
             </Link>
+            <Link href="/compras" className="text-stone-600 hover:text-stone-900">
+              Compras
+            </Link>
+            <Link href="/inventario" className="text-stone-600 hover:text-stone-900">
+              Inventario
+            </Link>
+            <Link href="/mermas" className="text-stone-600 hover:text-stone-900">
+              Mermas
+            </Link>
             <Link href="/dashboard" className="text-stone-600 hover:text-stone-900">
               Resultados
             </Link>

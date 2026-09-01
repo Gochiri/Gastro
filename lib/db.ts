@@ -24,6 +24,19 @@ const pool = new Pool({
   idleTimeoutMillis: 30_000,
 })
 
+/**
+ * Sin este manejador, un error en una conexión OCIOSA se convierte en una
+ * excepción no capturada que tumba el proceso entero.
+ *
+ * No es hipotético: pasa cada vez que la base se reinicia, en un failover, o
+ * cuando un administrador corta conexiones ("terminating connection due to
+ * administrator command"). El pool ya sabe descartar el cliente roto y abrir
+ * otro; lo único que falta es no morir mientras tanto.
+ */
+pool.on('error', (error) => {
+  console.error('[db] conexión del pool caída, se descarta y se reabre:', error.message)
+})
+
 /** Fila de `pg` con columnas tipadas por el llamador. */
 export type Fila = QueryResultRow
 
@@ -44,6 +57,17 @@ export async function withTenant<T>(
   fn: (cliente: PoolClient) => Promise<T>,
 ): Promise<T> {
   const cliente = await pool.connect()
+
+  // Mientras la conexión está tomada del pool, sus errores los emite el
+  // CLIENTE, no el pool: si nadie escucha, un corte a mitad de transacción se
+  // vuelve una excepción no capturada. Se registra y se deja que el rechazo de
+  // la consulta en curso haga su trabajo.
+  const alFallar = (error: Error): void => {
+    console.error('[db] la conexión se cortó durante la transacción:', error.message)
+  }
+  cliente.on('error', alFallar)
+
+  let rota = false
   try {
     await cliente.query('begin')
     // El claim replica el contrato de Supabase Auth: auth.uid() lee `sub`.
@@ -55,12 +79,17 @@ export async function withTenant<T>(
     await cliente.query('commit')
     return resultado
   } catch (error) {
+    rota = true
     await cliente.query('rollback').catch(() => {
       /* la conexión ya puede estar rota; el error original es el que importa */
     })
     throw error
   } finally {
-    cliente.release()
+    cliente.off('error', alFallar)
+    // Con un argumento, el pool DESTRUYE la conexión en vez de reutilizarla.
+    // Devolver una conexión posiblemente rota al pool hace que el error
+    // reaparezca en una petición de otro usuario, sin relación con la causa.
+    cliente.release(rota ? true : undefined)
   }
 }
 

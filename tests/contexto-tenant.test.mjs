@@ -14,6 +14,8 @@ import pg from 'pg'
  */
 
 const CADENA = process.env.DATABASE_URL ?? 'postgresql://app_user:test@localhost:5433/gastro'
+// lib/db.ts exige DATABASE_URL al cargarse.
+process.env.DATABASE_URL ??= CADENA
 const USUARIO_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
 test('el claim no sobrevive a la transacción que lo fijó', async () => {
@@ -48,4 +50,35 @@ test('el claim no sobrevive a la transacción que lo fijó', async () => {
   } finally {
     await pool.end()
   }
+})
+
+test('el pool sobrevive a que le corten las conexiones', async () => {
+  // Reproduce lo que pasa en un reinicio de la base o un failover: un
+  // administrador termina las conexiones abiertas. Sin un manejador de error
+  // en el pool, esto se convierte en una excepción no capturada que tumba el
+  // servidor entero.
+  const { withTenant, cerrarPool } = await import('../lib/db.ts')
+
+  const antes = await withTenant(USUARIO_A, async (c) => {
+    const { rows } = await c.query('select 1 as ok')
+    return rows[0].ok
+  })
+  assert.equal(antes, 1)
+
+  const verdugo = new pg.Pool({ connectionString: 'postgresql://postgres@localhost:5433/gastro' })
+  await verdugo.query(`
+    select pg_terminate_backend(pid) from pg_stat_activity
+    where datname = 'gastro' and usename = 'app_user' and pid <> pg_backend_pid()`)
+  await verdugo.end()
+
+  // Un momento para que el pool procese el corte.
+  await new Promise((r) => setTimeout(r, 300))
+
+  const despues = await withTenant(USUARIO_A, async (c) => {
+    const { rows } = await c.query('select 1 as ok')
+    return rows[0].ok
+  })
+  assert.equal(despues, 1, 'el pool debe reabrir la conexión, no arrastrar el error')
+
+  await cerrarPool()
 })

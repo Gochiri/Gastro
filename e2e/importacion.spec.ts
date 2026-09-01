@@ -17,7 +17,7 @@ test.describe('Importar ventas y ver resultados', () => {
   test.beforeAll(() => {
     // Base limpia: este flujo escribe ventas y el hash del archivo impide
     // volver a importarlo.
-    execFileSync(path.join(RAIZ, 'scripts/db.sh'), ['reset'], { stdio: 'ignore' })
+    execFileSync(path.join(RAIZ, 'scripts/db.sh'), ['reset'], { stdio: 'pipe' })
   })
 
   test.beforeEach(async ({ context }) => {
