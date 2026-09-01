@@ -4,8 +4,9 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 y 1 completas** (fundación multi-tenant y costeo de recetas).
-Ver el plan completo para el resto del roadmap.
+Estado: **fases 0, 1 y la interfaz web** completas. Ya se puede entrar, ver el
+catálogo de recetas costeado y abrir la ficha técnica de cualquier plato con el
+desglose por insumo.
 
 ## Puesta en marcha
 
@@ -14,25 +15,61 @@ los tests: las migraciones son las mismas, y un shim local reproduce el contrato
 de `auth.uid()`.
 
 ```bash
+npm install
+
 # arrancar un Postgres local (una vez por sesión)
 PGDATA=/var/lib/postgresql/gastro
 su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $PGDATA -U postgres --auth=trust"
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PGDATA -o '-p 5433 -k /tmp' -l /tmp/pg.log start"
 
 ./scripts/db.sh reset   # aplica migraciones + seed
-./scripts/test.sh       # ejecuta toda la suite
+cp .env.example .env.local && $EDITOR .env.local
+npm run dev             # http://localhost:3000
+npm test                # SQL + contexto de tenant + E2E
 ```
+
+### Suites
+
+| Comando | Qué prueba |
+|---|---|
+| `npm run test:db` | RLS estructural y de acceso, y el costeo contra cálculo manual |
+| `npm run test:contexto` | Que el contexto de tenant sea transaccional y no de sesión |
+| `npm run test:e2e` | Que la UI muestre los importes verificados y respete el aislamiento |
 
 ## Estructura
 
 ```
+app/                   Next.js App Router. Server Components; no hay estado cliente.
+consultas/             SQL tipado. Ningún cálculo vive aquí.
+lib/db.ts              Pool y withTenant: ÚNICO punto que abre conexiones.
+lib/sesion.ts          Sesión. Login de dev; Supabase Auth en producción.
 supabase/migrations/   Esquema. Se aplican en orden y valen tal cual en Supabase.
 supabase/seed/         Restaurante de ejemplo: 40 insumos, 17 recetas.
 supabase/tests/        Suites SQL. Los shims 00_/01_ son SOLO locales.
-scripts/               db.sh (recrear base) y test.sh (suite completa).
+tests/                 Test del contexto de tenant (node --test).
+e2e/                   Playwright.
+scripts/               db.sh (recrear base) y test.sh (suite SQL).
+.claude/rules/         Convenciones de código, copiadas del proyecto ECC.
 ```
 
 ## Decisiones de diseño
+
+**Los datos se leen con `pg`, no con el SDK de Supabase.** El valor del sistema
+está en funciones SQL como `costo_receta()` y en vistas agregadas; PostgREST
+estorba más de lo que ayuda para eso, y la conexión directa permite ejecutar y
+probar todo contra un Postgres normal sin depender del stack de Supabase.
+Supabase Auth se mantiene para producción, y su cadena de conexión es Postgres
+estándar: el mismo código sirve allí sin cambios.
+
+**El contexto de tenant es transaccional.** El pool reutiliza conexiones entre
+peticiones. Un `set_config` de ámbito de sesión dejaría la identidad pegada a la
+conexión, y la heredaría cualquier consulta posterior que no declare la suya.
+`withTenant()` lo fija con ámbito de transacción y `tests/contexto-tenant.test.mjs`
+falla si alguien lo cambia.
+
+**La app se conecta con un rol sin privilegios.** El superusuario y
+`service_role` ignoran RLS: usarlos convertiría todo el aislamiento en
+decoración.
 
 **El aislamiento entre clientes vive en la base de datos.** Toda tabla con
 `organizacion_id` lleva RLS activado y forzado. En un SaaS, una consulta a la

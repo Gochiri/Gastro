@@ -107,4 +107,26 @@ begin
   perform pg_temp.igual('porcentajes suman 100', v_pct, 100, 0.05);
 end $$;
 
+-- La vista costea a la fecha actual, que ya usa el precio de marzo del tomate.
+-- Es el número que ve la UI, así que también está verificado a mano:
+--   tomate 11000/10 kg = 1.10 $/g
+--   salsa  = 2000/0.90 x 1.10 + 100 x 12 + 20 x 0.50            =  3654.4444
+--   ragú   = 0.5 x 3654.4444 + 1500/0.95 x 9 + 500/0.85 x 1.20  = 16743.6309
+--   lasaña = 0.5 x 16743.6309 + 600 x 5 + 800/0.98 x 7          = 17086.1012
+--   porción                                                     =  2135.7627
+do $$
+declare v_total numeric; v_unit numeric;
+begin
+  select costo_total, costo_unitario into v_total, v_unit
+  from vista_recetas_costo where id = pg_temp.rid('Lasaña');
+
+  perform pg_temp.igual('vista: lasaña a precio actual', v_total, 17086.1012, 0.001);
+  perform pg_temp.igual('vista: lasaña por porción',     v_unit,   2135.7627, 0.001);
+
+  if (select count(*) from vista_recetas_costo) <> (select count(*) from recetas) then
+    raise exception 'FALLO: la vista no lista todas las recetas';
+  end if;
+  raise notice 'ok  la vista cubre las % recetas', (select count(*) from recetas);
+end $$;
+
 \echo 'test_costeo: TODO OK'

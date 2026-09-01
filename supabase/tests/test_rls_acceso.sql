@@ -53,6 +53,22 @@ do $$ begin
   raise notice 'ok  usuario A ve sus datos y ninguno ajeno';
 end $$;
 
+-- Las vistas son el agujero clásico: sin security_invoker se ejecutan con los
+-- permisos de su dueño y hacen bypass de RLS.
+do $$
+declare n_vista bigint; n_tabla bigint;
+begin
+  select count(*) into n_vista from vista_recetas_costo;
+  select count(*) into n_tabla from recetas;
+  if n_vista <> n_tabla then
+    raise exception 'FUGA: la vista muestra % filas y la tabla %', n_vista, n_tabla;
+  end if;
+  if exists (select 1 from vista_recetas_costo where nombre = 'Taco de canasta') then
+    raise exception 'FUGA: vista_recetas_costo expone recetas de otra organización';
+  end if;
+  raise notice 'ok  vista_recetas_costo respeta RLS (% filas)', n_vista;
+end $$;
+
 -- --- Usuario B: solo ve Bistró Sur -----------------------------------------
 select pg_temp.entrar(:'USR_B');
 do $$ begin
