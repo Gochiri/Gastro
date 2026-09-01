@@ -5,6 +5,8 @@ import type { BrowserContext, APIRequestContext } from '@playwright/test'
 export const USUARIOS = {
   cantinaNorte: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   bistroSur: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+  compras: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+  soloLectura: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
 } as const
 
 function cookieFirmada(usuarioId: string): string {

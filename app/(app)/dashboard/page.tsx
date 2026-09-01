@@ -211,6 +211,18 @@ export default async function Dashboard() {
           ))}
         </tbody>
       </table>
+
+      {/* El margen de contribución no es el resultado: falta descontar la
+          estructura. Sin este puente, el dashboard se lee como si el negocio
+          ganara plata. */}
+      <p className="mt-10 rounded-lg border border-stone-200 bg-white p-4 text-sm text-stone-600">
+        Este margen todavía no descuenta el alquiler, los servicios ni la
+        administración.{' '}
+        <Link href="/finanzas" className="font-medium text-stone-900 underline">
+          Cerrá el mes en Finanzas
+        </Link>{' '}
+        para ver el EBITDA y cuánto falta vender para el punto de equilibrio.
+      </p>
     </>
   )
 }

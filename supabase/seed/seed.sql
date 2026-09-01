@@ -351,3 +351,87 @@ values ('11111111-1111-1111-1111-111111111111', 'Cerveza artesanal', 'bebidas', 
 insert into productos (organizacion_id, nombre, categoria, receta_id)
 values ('22222222-2222-2222-2222-222222222222', 'Taco de canasta', 'cocina',
         (select id from recetas where nombre = 'Taco de canasta'));
+
+-- ===========================================================================
+-- Estructura fiscal
+-- ===========================================================================
+
+-- Se completa la config de Cantina Norte con lo que necesitan los reportes:
+--   precios_con_iva     los precios del menú son finales al público
+--   compras_con_iva     el remito del proveedor viene con IVA incluido
+--   ingresos_brutos_pct alícuota de CABA para servicios de gastronomía
+update organizaciones
+set config_fiscal = config_fiscal || jsonb_build_object(
+      'precios_con_iva',     true,
+      'compras_con_iva',     true,
+      'ingresos_brutos_pct', 3.0)
+where id = '11111111-1111-1111-1111-111111111111';
+
+update organizaciones
+set config_fiscal = config_fiscal || jsonb_build_object(
+      'precios_con_iva', true,
+      'compras_con_iva', true)
+where id = '22222222-2222-2222-2222-222222222222';
+
+-- Los alimentos frescos tributan la alícuota reducida al comprarlos, aunque el
+-- plato terminado se venda al 21%. Es la diferencia que hace que el crédito
+-- fiscal de compras no sea proporcional al débito de ventas.
+update insumos set iva_pct = 10.5
+where organizacion_id = '11111111-1111-1111-1111-111111111111'
+  and categoria in ('carniceria', 'lacteos', 'verduleria');
+
+-- ===========================================================================
+-- Gastos fijos
+-- ===========================================================================
+
+-- La estructura de costos del negocio: lo que hay que pagar aunque no entre
+-- nadie. Los que llevan sucursal son del local; los que van con NULL son de la
+-- organización y en el comparativo se prorratean.
+--
+-- Las dos últimas filas quedan FUERA del EBITDA por definición de la métrica:
+-- la cuota del préstamo son intereses y la amortización no es siquiera una
+-- salida de caja.
+insert into gastos_fijos
+  (organizacion_id, sucursal_id, categoria, concepto, importe_mensual, vigente_desde)
+values
+  ('11111111-1111-1111-1111-111111111111', '11111111-0000-0000-0000-000000000001',
+   'alquiler', 'Alquiler Casa Central', 850000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', '11111111-0000-0000-0000-000000000002',
+   'alquiler', 'Alquiler Sucursal Palermo', 620000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'servicios', 'Luz, gas, agua e internet', 180000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'sueldos_administrativos', 'Administración y contadora', 320000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'marketing', 'Redes y fotografía de platos', 90000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'seguros', 'Seguro integral de comercio', 45000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'mantenimiento', 'Mantenimiento de equipos y limpieza', 60000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'impuestos_municipales', 'Habilitación y tasas municipales', 75000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'financiero', 'Cuota del préstamo del horno', 140000, '2026-01-01'),
+  ('11111111-1111-1111-1111-111111111111', null,
+   'amortizacion', 'Amortización del equipamiento', 110000, '2026-01-01');
+
+-- ===========================================================================
+-- Retenciones sufridas
+-- ===========================================================================
+
+-- Los agregadores de delivery retienen sobre cada liquidación. Ese dinero ya
+-- está pagado: si no se computa contra la posición del período, el negocio lo
+-- paga dos veces.
+insert into retenciones
+  (organizacion_id, sucursal_id, fecha, tipo, sentido, contraparte, comprobante,
+   base_imponible, alicuota_pct, importe)
+values
+  ('11111111-1111-1111-1111-111111111111', '11111111-0000-0000-0000-000000000001',
+   '2026-02-05', 'iva', 'sufrida', 'Rappi', 'LIQ-2026-0205',
+   120000, 3.000, 3600),
+  ('11111111-1111-1111-1111-111111111111', '11111111-0000-0000-0000-000000000001',
+   '2026-02-05', 'ingresos_brutos', 'sufrida', 'Rappi', 'LIQ-2026-0205',
+   120000, 2.000, 2400),
+  ('11111111-1111-1111-1111-111111111111', '11111111-0000-0000-0000-000000000001',
+   '2026-02-06', 'ganancias', 'sufrida', 'PedidosYa', 'LIQ-2026-0206',
+   80000, 2.000, 1600);

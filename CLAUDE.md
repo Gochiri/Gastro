@@ -105,3 +105,26 @@ separadas por archivo). Cada archivo que escribe en la base la recrea en su
     se pidió explícitamente.
 24. **Todo denominador de food cost son las ventas costeadas**, calculadas
     directo y nunca reconstruidas desde un porcentaje redondeado.
+
+## Reglas del cierre financiero
+
+25. **El período del cierre es un mes calendario**, no el rango de días con
+    ventas. El IVA se liquida por mes y los gastos fijos son mensuales. Si el
+    mes tiene menos días de ventas cargadas, se avisa; no se recorta el período.
+26. **El EBITDA es la única métrica que usa ventas TOTALES como denominador.**
+    Con cobertura de costeo parcial es un techo, y hay que decirlo junto al
+    número. La regla 24 sigue valiendo para todo lo demás.
+27. **La categoría del gasto decide si entra en el EBITDA**
+    (`app_gasto_en_ebitda`), no el usuario. Intereses, amortizaciones e impuesto
+    a las ganancias quedan afuera por definición de la métrica.
+28. **Dar de baja un gasto fijo cierra su vigencia; nunca se borra la fila.**
+    Borrarla recalcularía meses ya cerrados.
+29. **El punto de equilibrio se calcula con el cociente exacto**, nunca
+    dividiendo por el margen de contribución ya redondeado. Sin margen de
+    contribución positivo devuelve NULL, no un número.
+30. **El importe de una retención se carga del certificado**, no se deriva de
+    base × alícuota, y un saldo a favor nunca se informa como "a pagar"
+    negativo.
+31. **En el comparativo de sucursales, los gastos prorrateados van en columna
+    aparte de los asignados**, y la suma de los EBITDA por sucursal tiene que dar
+    el EBITDA de la organización.

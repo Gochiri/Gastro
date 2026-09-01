@@ -4,10 +4,11 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 a 4** completas, más el primer widget de IA. Se puede costear el menú, importar el
-histórico de ventas, ver margen y rentabilidad por canal, y —lo que ningún Excel
-da— comparar lo que las recetas dicen que debió consumirse contra lo que
-realmente salió de la heladera.
+Estado: **fases 0 a 4 y 6** completas, más el primer widget de IA. Se puede costear el menú, importar
+el histórico de ventas, ver margen y rentabilidad por canal, cerrar el mes con
+EBITDA, punto de equilibrio y posición fiscal, y —lo que ningún Excel da—
+comparar lo que las recetas dicen que debió consumirse contra lo que realmente
+salió de la heladera.
 
 ## Puesta en marcha
 
@@ -52,7 +53,7 @@ consultas/             SQL tipado. Ningún cálculo vive aquí.
 lib/db.ts              Pool y withTenant: ÚNICO punto que abre conexiones.
 lib/sesion.ts          Sesión. Login de dev; Supabase Auth en producción.
 supabase/migrations/   Esquema. Se aplican en orden y valen tal cual en Supabase.
-supabase/seed/         Restaurante de ejemplo: 40 insumos, 17 recetas.
+supabase/seed/         Restaurante de ejemplo: 40 insumos, 17 recetas, estructura de costos.
 supabase/tests/        Suites SQL. Los shims 00_/01_ son SOLO locales.
 tests/                 Test del contexto de tenant (node --test).
 e2e/                   Playwright.
@@ -314,3 +315,113 @@ mercadería dos veces. Cada compra queda trazada a la recepción que la originó
 todas las recetas que usen ese insumo, así que tiene que ser una decisión
 consciente y no el efecto secundario de cargar un remito: una compra de urgencia
 a precio atípico no es el precio del insumo.
+
+## Cierre financiero
+
+`resumen_ebitda(desde, hasta)` y `punto_equilibrio(desde, hasta)` cierran el mes:
+del ingreso al resultado, y cuánto habría que vender para no perder plata.
+
+**El período del cierre es un mes calendario, no los días con ventas cargadas.**
+El dashboard de ventas usa el rango exacto de las ventas; el cierre no puede.
+El IVA se liquida por mes: una compra del día 3 y una venta del día 6 pertenecen
+a la misma posición fiscal, y recortar el rango dejaría ese crédito afuera y
+haría pagar de más. Los gastos fijos también son mensuales, y sobre un mes
+completo el devengamiento es exacto en vez de arrastrar el redondeo del
+prorrateo.
+
+La contracara —un mes entero de alquiler contra tres días de ventas cargadas—
+se dice en la pantalla en vez de disimularse recortando el período: *"hay ventas
+en 3 de los 28 días del mes, pero la estructura se devenga por el mes completo"*.
+
+**Los gastos fijos son un importe mensual con vigencia, no una fila por mes.**
+El alquiler no es un evento de febrero: es $X por mes desde que se firmó el
+contrato hasta que cambia. Un aumento se carga cerrando la vigencia y abriendo
+una nueva, y por eso dar de baja un gasto **cierra su vigencia y nunca borra la
+fila**: borrarla recalcularía meses ya cerrados y un período que estaba en rojo
+pasaría a verde solo.
+
+Los períodos parciales se prorratean **mes por mes, cada uno por su propia
+cantidad de días**. Del 15 de enero al 14 de febrero son 17/31 más 14/28; el
+atajo de "30 días por mes" desajusta febrero y los meses de 31.
+
+**La categoría decide si el gasto entra en el EBITDA.** Intereses, amortizaciones
+e impuesto a las ganancias quedan afuera por definición de la métrica, no por
+criterio del usuario: si alguien carga la cuota de un préstamo y el sistema la
+resta, el número deja de ser un EBITDA y pasa a ser otra cosa con el rótulo
+equivocado. Se listan igual, debajo, porque hay que pagarlos.
+
+**El EBITDA es la única métrica que NO usa el denominador de ventas costeadas.**
+Es deliberado y se explica solo: el food cost se mide contra ventas costeadas
+porque mezclar un costo parcial con ventas completas da un porcentaje falsamente
+bajo; el EBITDA es el resultado del negocio, y el negocio incluye las cervezas
+sin ficha técnica. La consecuencia se dice en voz alta: con cobertura parcial la
+materia prima de esa porción no está descontada, así que **el EBITDA mostrado es
+un techo**, no una estimación.
+
+### Punto de equilibrio
+
+```
+punto de equilibrio = gastos fijos de caja / margen de contribución %
+```
+
+Dos decisiones que cambian el número y por eso se declaran:
+
+- **El trabajo fichado cuenta como variable.** La brigada escala con la demanda;
+  los sueldos de estructura van como gasto fijo, en su propia categoría. Meterlo
+  todo del lado fijo infla el punto de equilibrio y lo vuelve inalcanzable en el
+  papel.
+- **La amortización queda afuera**: es un apunte contable, no una factura de este
+  mes. Los intereses sí entran, porque al banco hay que pagarle.
+
+Se calcula con el **cociente exacto**, nunca dividiendo por el margen de
+contribución ya redondeado a dos decimales: ese redondeo intermedio se convierte
+en cientos de miles de diferencia en las ventas necesarias, y hay un test que lo
+comprueba. Si el margen de contribución no es positivo la función devuelve NULL
+y la pantalla lo dice: cuando cada venta pierde plata no existe un volumen que
+salve el mes, y un número inventado ahí es peor que un guion.
+
+## IVA y retenciones
+
+Alcance declarado desde el principio: **solo cálculo y reportes**. No hay
+conexión con ARCA, SAT ni DIAN, y el sistema no emite comprobantes. Lo que
+entrega es el papel que el contador necesita, con la trazabilidad de dónde sale
+cada número.
+
+**La alícuota es una propiedad del bien, no del comprobante.** Vive en el
+producto y en el insumo; `config_fiscal` de la organización solo aporta el valor
+por defecto, y no se copia al alta: si mañana cambia la alícuota general, las
+fichas que nunca la definieron deben seguirla. En el ejemplo argentino los
+alimentos frescos se compran al 10,5% y el plato terminado se vende al 21%, que
+es por qué el crédito fiscal no es proporcional al débito.
+
+**Los precios de gastronomía son finales al público, así que la base se despeja
+hacia atrás** (`neto / (1 + tasa)`). Tratar un precio con IVA incluido como si
+fuera neto sobredeclara el débito en un 21% del 21%.
+
+**El importe de una retención se carga del certificado, no se deriva de base ×
+alícuota.** Si no coinciden, manda el certificado. Y una retención mayor a la
+posición **no produce un saldo negativo a pagar**: un saldo a favor no es "pagar
+menos que cero", es crédito que se arrastra.
+
+La pantalla informa además algo que el food cost no muestra: si los precios de
+los insumos están cargados con IVA incluido y el negocio está inscripto, ese
+crédito fiscal está hoy dentro del costo de materia prima y el food cost real es
+más bajo que el del dashboard.
+
+## Comparativo entre sucursales
+
+Con una sola sucursal, el resultado del negocio es el del local. Con dos, el
+promedio esconde el reparto: una sucursal sana puede estar financiando a otra
+que pierde plata.
+
+**Los gastos de organización se prorratean por participación en las ventas, y se
+informan en columna aparte de los asignados.** Es una convención, no una verdad:
+quien mire el número tiene que poder distinguir cuánto de la pérdida de una
+sucursal es suya y cuánto le llegó repartido. Una sucursal sin ventas no recibe
+prorrateo, pero sigue cargando con sus gastos propios — y aparece igual en el
+comparativo, porque una sucursal que solo genera gastos es exactamente lo que
+hay que ver.
+
+**Invariante verificado por test: la suma de los EBITDA por sucursal es el EBITDA
+de la organización.** Un comparativo que no cierra contra el total no sirve para
+decidir nada.
