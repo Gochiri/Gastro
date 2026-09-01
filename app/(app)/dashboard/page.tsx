@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { usuarioActual } from '@/lib/sesion'
 import { organizacionActiva } from '@/consultas/recetas'
 import { margenPorCanal, margenPorProducto, periodoConDatos, resumen } from '@/consultas/kpis'
+import { primeCost } from '@/consultas/personal'
 import { formatearCantidad, formatearImporte, formatearPorcentaje } from '@/lib/formato'
 import { BarrasHorizontales, CifraPrincipal, Tarjeta } from '@/app/componentes/tarjetas'
 import { Explicador } from '@/app/componentes/explicador'
@@ -30,10 +31,11 @@ export default async function Dashboard() {
     )
   }
 
-  const [datos, canales, productos] = await Promise.all([
+  const [datos, canales, productos, prime] = await Promise.all([
     resumen(usuario, periodo),
     margenPorCanal(usuario, periodo),
     margenPorProducto(usuario, periodo),
+    primeCost(usuario, periodo),
   ])
 
   const importe = (v: number): string =>
@@ -103,6 +105,52 @@ export default async function Dashboard() {
           El {pct(100 - (datos.coberturaPct ?? 0))} de las ventas corresponde a productos sin
           ficha técnica. Su costo no entra en el food cost de arriba.
         </p>
+      )}
+
+      {prime && prime.costoLaboral > 0 && (
+        <section className="mt-10" data-testid="prime-cost">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-500">
+            Prime cost
+          </h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Materia prima más trabajo, sobre las ventas costeadas. Por encima del
+            65% no queda margen para alquiler, servicios y ganancia.
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-4">
+            <Tarjeta
+              etiqueta="Materia prima"
+              valor={pct(prime.foodCostPct)}
+              nota={importe(prime.costoComida)}
+              testid="prime-comida"
+            />
+            <Tarjeta
+              etiqueta="Trabajo"
+              valor={pct(prime.laborCostPct)}
+              nota={`${importe(prime.costoLaboral)} en ${formatearCantidad(prime.horas, organizacion.pais)} horas`}
+              testid="prime-trabajo"
+            />
+            <Tarjeta
+              etiqueta="Prime cost"
+              valor={pct(prime.primeCostPct)}
+              nota={
+                prime.primeCostPct !== null && prime.primeCostPct > 65
+                  ? 'Por encima del umbral sano'
+                  : 'Dentro del umbral sano'
+              }
+              testid="prime-total"
+            />
+          </div>
+          {prime.fichajesAbiertos > 0 && (
+            <p
+              className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+              data-testid="aviso-fichajes"
+            >
+              Hay {prime.fichajesAbiertos} fichaje(s) sin cerrar en el período. Esas
+              horas no están contadas, así que el costo laboral real es mayor que
+              el que se muestra.
+            </p>
+          )}
+        </section>
       )}
 
       <div className="mt-10">

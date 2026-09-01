@@ -37,6 +37,12 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
             <Link href="/mermas" className="text-stone-600 hover:text-stone-900">
               Mermas
             </Link>
+            <Link href="/personal" className="text-stone-600 hover:text-stone-900">
+              Personal
+            </Link>
+            <Link href="/ordenes" className="text-stone-600 hover:text-stone-900">
+              Órdenes
+            </Link>
             <Link href="/dashboard" className="text-stone-600 hover:text-stone-900">
               Resultados
             </Link>

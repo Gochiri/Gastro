@@ -93,3 +93,15 @@ separadas por archivo). Cada archivo que escribe en la base la recrea en su
 18. **La llamada al modelo es inyectable** (`Invocador`), para poder probar todo
     lo demás sin credenciales.
 19. **Cada ejecución se registra** con tokens y costo, incluidos los fallos.
+
+## Reglas de la fase de personal y compras
+
+20. **El costo de una hora incluye las cargas patronales.** Nunca usar
+    `costo_hora` suelto para calcular costo laboral.
+21. **La fecha de un turno se guarda resuelta en la zona del negocio.**
+    `entrada::date` depende de la zona de la sesión y no es indexable.
+22. **Los fichajes sin cerrar se informan, no se estiman.**
+23. **Confirmar una recepción genera compras**, y solo toca `precios_insumo` si
+    se pidió explícitamente.
+24. **Todo denominador de food cost son las ventas costeadas**, calculadas
+    directo y nunca reconstruidas desde un porcentaje redondeado.

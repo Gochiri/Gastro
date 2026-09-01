@@ -10,11 +10,14 @@
 -- Organizaciones y accesos
 -- ===========================================================================
 
-insert into organizaciones (id, nombre, pais, moneda, config_fiscal) values
+-- La zona horaria es del negocio: define a qué día pertenece un turno que
+-- cruza la medianoche. Sin ella, un turno de las 22:00 en Buenos Aires se
+-- contabiliza en el día siguiente.
+insert into organizaciones (id, nombre, pais, moneda, zona_horaria, config_fiscal) values
   ('11111111-1111-1111-1111-111111111111', 'Cantina Norte', 'AR', 'ARS',
-   '{"iva_general": 21, "iva_alimentos": 10.5}'),
+   'America/Argentina/Buenos_Aires', '{"iva_general": 21, "iva_alimentos": 10.5}'),
   ('22222222-2222-2222-2222-222222222222', 'Bistró Sur',    'MX', 'MXN',
-   '{"iva_general": 16}');
+   'America/Mexico_City', '{"iva_general": 16}');
 
 insert into sucursales (id, organizacion_id, nombre, direccion) values
   ('11111111-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'Casa Central', 'Av. Corrientes 1234'),

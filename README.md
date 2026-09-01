@@ -4,7 +4,7 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 a 3** completas, más el primer widget de IA. Se puede costear el menú, importar el
+Estado: **fases 0 a 4** completas, más el primer widget de IA. Se puede costear el menú, importar el
 histórico de ventas, ver margen y rentabilidad por canal, y —lo que ningún Excel
 da— comparar lo que las recetas dicen que debió consumirse contra lo que
 realmente salió de la heladera.
@@ -270,3 +270,47 @@ simulado (`tests/ia.test.mjs`): el constructor de contexto, la auditoría de
 cifras —incluidos los casos ambiguos—, el cálculo de costos y el registro. La
 llamada al modelo es un adaptador fino y aislado justamente para que el resto
 fuese testeable.
+
+## Prime cost
+
+`resumen_prime_cost(desde, hasta)` responde la pregunta de supervivencia:
+materia prima más trabajo sobre las ventas. Por encima del 65% no queda margen
+para alquiler, servicios y ganancia, por bien que se vea la facturación.
+
+**El costo de una hora incluye las cargas patronales.** `empleados` guarda
+`costo_hora` y `cargas_sociales_pct` por separado, y el costo real es el
+producto de los dos. Omitir las cargas subestima el costo laboral en torno a un
+tercio y vuelve inútil la métrica.
+
+**El día de un turno es el de su entrada, en la zona horaria del negocio.** Un
+turno que arranca a las 22:00 en Buenos Aires pertenece a ese día, no al
+siguiente. `fichajes.fecha_operativa` se guarda resuelto porque `entrada::date`
+depende de la zona de la sesión: no es determinista, y con el servidor en UTC el
+costo laboral diario queda mal repartido. Por eso `organizaciones` tiene
+`zona_horaria`.
+
+**Los fichajes sin cerrar no se cuestan, pero se informan.** No se sabe cuánto
+duraron; inventar una duración sería peor. El dashboard avisa cuántos hay y
+aclara que el costo laboral real es mayor que el mostrado.
+
+**La tarifa se congela al cerrar el fichaje**, igual que el costo de una venta o
+la valuación de un conteo: un aumento de sueldo no reescribe meses cerrados.
+
+**El denominador es el mismo que en todo el sistema** —ventas costeadas— y se
+calcula directo, no reconstruyéndolo desde el porcentaje de cobertura, que viene
+redondeado. Hay un test que verifica que el food cost del prime cost coincide
+exactamente con el del dashboard de ventas.
+
+## Órdenes de compra
+
+Orden al proveedor, recepciones parciales y avance por insumo comparado siempre
+en la unidad base (se puede pedir en cajas y recibir en kilos).
+
+**Confirmar una recepción genera las compras** que el cálculo de consumo real ya
+consume: cierra el ciclo que en la fase 3 obligaba a cargar cada entrada de
+mercadería dos veces. Cada compra queda trazada a la recepción que la originó.
+
+**Actualizar la lista de precios es una casilla que viene desmarcada.** Recostea
+todas las recetas que usen ese insumo, así que tiene que ser una decisión
+consciente y no el efecto secundario de cargar un remito: una compra de urgencia
+a precio atípico no es el precio del insumo.

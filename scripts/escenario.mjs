@@ -31,6 +31,35 @@ const CIERRE = '2026-02-08T08:00:00-03:00'
 export const FALTANTE_CARNE_G = 2000
 export const MERMA_CARNE_G = 500
 
+/**
+ * Personal. Las cargas sociales son parte del costo real de una hora: sin
+ * ellas el prime cost sale un tercio más bajo de lo que es.
+ */
+const EMPLEADOS = [
+  { nombre: 'Marta Ruiz',   puesto: 'Cocina',    costoHora: 3000, cargas: 35 },
+  { nombre: 'Diego Paz',    puesto: 'Salón',     costoHora: 2200, cargas: 35 },
+  { nombre: 'Lucía Bravo',  puesto: 'Encargada', costoHora: 4500, cargas: 35 },
+]
+
+/**
+ * Fichajes del período. Incluyen dos casos que hay que poder verificar:
+ *   - un turno que cruza la medianoche (debe contar en el día que arrancó)
+ *   - un fichaje sin cerrar (no se cuesta, pero se informa)
+ */
+const FICHAJES = [
+  ['Marta Ruiz',  '2026-02-05T10:00:00-03:00', '2026-02-05T18:00:00-03:00'],
+  ['Marta Ruiz',  '2026-02-06T10:00:00-03:00', '2026-02-06T18:00:00-03:00'],
+  ['Marta Ruiz',  '2026-02-07T10:00:00-03:00', '2026-02-07T18:00:00-03:00'],
+  ['Diego Paz',   '2026-02-05T12:00:00-03:00', '2026-02-05T20:00:00-03:00'],
+  ['Diego Paz',   '2026-02-06T12:00:00-03:00', '2026-02-06T20:00:00-03:00'],
+  // Cruza la medianoche: pertenece al 7 de febrero, no al 8.
+  ['Diego Paz',   '2026-02-07T22:00:00-03:00', '2026-02-08T02:00:00-03:00'],
+  ['Lucía Bravo', '2026-02-05T09:00:00-03:00', '2026-02-05T15:00:00-03:00'],
+  ['Lucía Bravo', '2026-02-06T09:00:00-03:00', '2026-02-06T15:00:00-03:00'],
+  // Sin cerrar: alguien se olvidó de fichar la salida.
+  ['Lucía Bravo', '2026-02-07T09:00:00-03:00', null],
+]
+
 const admin = new pg.Pool({ connectionString: 'postgresql://postgres@localhost:5433/gastro' })
 const sql = async (t, p = []) => (await admin.query(t, p)).rows
 
@@ -135,10 +164,36 @@ async function main() {
   }
   const idCierre = await crearConteo(CIERRE, 'cierre', cierre)
 
+  // --- Personal ------------------------------------------------------------
+  for (const e of EMPLEADOS) {
+    await sql(
+      `insert into empleados (organizacion_id, sucursal_id, nombre, puesto, costo_hora, cargas_sociales_pct)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [ORG, SUCURSAL, e.nombre, e.puesto, e.costoHora, e.cargas],
+    )
+  }
+
+  let abiertos = 0
+  for (const [nombre, entrada, salida] of FICHAJES) {
+    const [f] = await sql(
+      `insert into fichajes (organizacion_id, sucursal_id, empleado_id, entrada, fecha_operativa)
+       select $1, $2, e.id, $4::timestamptz, current_date
+       from empleados e where e.nombre = $3 and e.organizacion_id = $1
+       returning id`,
+      [ORG, SUCURSAL, nombre, entrada],
+    )
+    if (salida) {
+      await sql('select cerrar_fichaje($1, $2::timestamptz)', [f.id, salida])
+    } else {
+      abiertos += 1
+    }
+  }
+
   console.log(`ventas confirmadas: ${ventas.insertadas} (sin costo: ${ventas.sinCosto})`)
   console.log(`conteo apertura: ${idApertura}`)
   console.log(`conteo cierre:   ${idCierre}`)
   console.log(`faltante plantado: ${FALTANTE_CARNE_G} g de carne, ${MERMA_CARNE_G} g como merma`)
+  console.log(`personal: ${EMPLEADOS.length} empleados, ${FICHAJES.length} fichajes (${abiertos} sin cerrar)`)
 }
 
 try {
