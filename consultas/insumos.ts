@@ -1,4 +1,4 @@
-import { consultar } from '@/lib/db'
+import { consultar } from '../lib/db.ts'
 
 export interface InsumoListado {
   id: string

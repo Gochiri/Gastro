@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { COOKIE_SESION, crearCookieSesion } from '@/lib/sesion'
+import { COOKIE_SESION, crearCookieSesion, modoDevActivo } from '@/lib/sesion'
 import { consultar } from '@/lib/db'
 
 /** Usuarios del seed, para el login de desarrollo. */
@@ -21,7 +21,7 @@ export interface UsuarioDev {
  * creada y esta función nunca se llama (requiere APP_AUTH_DEV=1).
  */
 export async function listarUsuariosDev(): Promise<UsuarioDev[]> {
-  if (process.env.APP_AUTH_DEV !== '1') return []
+  if (!modoDevActivo()) return []
   const filas = await consultar<Record<string, string>>(
     null,
     'select usuario_id, organizacion, rol from app_dev_usuarios()',
@@ -34,7 +34,7 @@ export async function listarUsuariosDev(): Promise<UsuarioDev[]> {
 }
 
 export async function entrarComo(formData: FormData): Promise<void> {
-  if (process.env.APP_AUTH_DEV !== '1') {
+  if (!modoDevActivo()) {
     throw new Error('El login de desarrollo está desactivado.')
   }
   const usuarioId = String(formData.get('usuarioId') ?? '')

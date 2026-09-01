@@ -42,7 +42,11 @@ test.describe('Costeo de recetas en la interfaz', () => {
     await page.goto('/recetas')
     await page.getByRole('link', { name: 'Lasaña' }).click()
     // Sin esperar a la ficha, el locator leería todavía la tabla del listado.
+    // No basta con que la tarjeta sea visible: hay que esperar a que la tabla
+    // tenga filas, o `allInnerTexts()` puede devolver una lista vacía o a medio
+    // renderizar y la suma da NaN.
     await expect(page.getByTestId('costo-total')).toBeVisible()
+    await expect(page.getByTestId('desglose').locator('tbody tr')).toHaveCount(7)
 
     const celdas = await page
       .getByTestId('desglose')

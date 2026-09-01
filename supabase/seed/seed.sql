@@ -317,3 +317,34 @@ values ('22222222-2222-2222-2222-222222222222',
         'insumo',
         (select id from insumos where nombre = 'Tortilla de maíz'),
         2, (select id from unidades where codigo = 'u'));
+
+-- ===========================================================================
+-- Canales de venta
+-- Las comisiones son las que cobran realmente los agregadores en la región.
+-- ===========================================================================
+
+insert into canales (organizacion_id, nombre, comision_pct) values
+  ('11111111-1111-1111-1111-111111111111', 'Salón',           0.00),
+  ('11111111-1111-1111-1111-111111111111', 'Delivery propio', 0.00),
+  ('11111111-1111-1111-1111-111111111111', 'Rappi',          28.00),
+  ('11111111-1111-1111-1111-111111111111', 'PedidosYa',      25.00),
+  ('22222222-2222-2222-2222-222222222222', 'Salón',           0.00);
+
+-- ===========================================================================
+-- Productos vendibles, ligados a su ficha técnica.
+-- ===========================================================================
+
+insert into productos (organizacion_id, nombre, categoria, receta_id)
+select '11111111-1111-1111-1111-111111111111', r.nombre, 'cocina', r.id
+from recetas r
+where r.organizacion_id = '11111111-1111-1111-1111-111111111111'
+  and r.tipo = 'plato';
+
+-- Producto de reventa SIN receta: baja la cobertura de costeo a propósito, para
+-- que los tests verifiquen que el sistema lo expone en vez de fingir costo cero.
+insert into productos (organizacion_id, nombre, categoria, receta_id)
+values ('11111111-1111-1111-1111-111111111111', 'Cerveza artesanal', 'bebidas', null);
+
+insert into productos (organizacion_id, nombre, categoria, receta_id)
+values ('22222222-2222-2222-2222-222222222222', 'Taco de canasta', 'cocina',
+        (select id from recetas where nombre = 'Taco de canasta'));

@@ -1,4 +1,4 @@
-import { consultar, withTenant } from '@/lib/db'
+import { consultar, withTenant } from '../lib/db.ts'
 
 /**
  * Consultas de recetas.

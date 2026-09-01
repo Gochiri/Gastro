@@ -53,3 +53,15 @@ npx playwright test     # E2E
 - `params` y `searchParams` son promesas: hay que `await`.
 - `cookies()` de `next/headers` es asíncrono.
 - Ante la duda, la fuente es `node_modules/next/dist/docs/`, no la memoria.
+
+## Reglas propias de la fase de ventas
+
+7. **El costo de una venta se congela al importar**, junto con la comisión del
+   canal. Nada recalcula el histórico de forma implícita: para eso está
+   `recalcular_costos_ventas()`.
+8. **Ningún emparejado automático de productos.** `proponer_productos()` sugiere;
+   confirma una persona. Cada confirmación se guarda como alias.
+9. **Un producto sin receta no muestra margen ni food cost**, muestra un guion.
+   La cobertura de costeo va siempre junto al food cost.
+10. **Los importes de CSV pasan por `lib/numeros.ts`.** El formato se detecta por
+    columna, nunca valor por valor.

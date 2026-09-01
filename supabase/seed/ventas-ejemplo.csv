@@ -1,0 +1,16 @@
+Fecha;Producto;Canal;Cantidad;Importe;Descuento
+05/02/2026;Lasaña;Salón;4;56.000,00;0
+05/02/2026;Lasaña;Rappi;3;42.000,00;0
+05/02/2026;Papas fritas;Salón;6;18.000,00;0
+05/02/2026;Cerveza artesanal;Salón;10;35.000,00;0
+
+06/02/2026;LASAÑA;Salón;2;28.000,00;1.400,00
+06/02/2026;HAMBURGUESA CLASICA;Salón;5;42.500,00;0
+06/02/2026;Hamburguesa clásica;Rappi;4;34.000,00;0
+06/02/2026;Papas fritas;PedidosYa;3;9.900,00;0
+06/02/2026;Milanesa napolitana;Salón;2;24.000,00;0
+07/02/2026;Lasaña;Salón;5;70.000,00;0
+07/02/2026;Lasaña;PedidosYa;2;28.000,00;0
+07/02/2026;Cerveza artesanal;Rappi;6;22.800,00;0
+07/02/2026;Pizza Margarita;Salón;7;49.000,00;0
+07/02/2026;Papas fritas;Salón;9;27.000,00;ilegible

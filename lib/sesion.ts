@@ -11,16 +11,28 @@ import { cookies } from 'next/headers'
  * HMAC y una pantalla que lista los usuarios del seed.
  */
 
-const MODO_DEV = process.env.APP_AUTH_DEV === '1'
 const NOMBRE_COOKIE = 'sesion'
 
-// Un stub de autenticación que llega a producción regala todas las cuentas.
-// Que la app no arranque es exactamente el comportamiento deseado.
-if (MODO_DEV && process.env.NODE_ENV === 'production') {
-  throw new Error(
-    'APP_AUTH_DEV=1 con NODE_ENV=production. El login de desarrollo no puede ' +
-      'usarse en producción: configura Supabase Auth y quita APP_AUTH_DEV.',
-  )
+/**
+ * Si el login de desarrollo está activo.
+ *
+ * Exige APP_AUTH_DEV=1 **y** que no sea producción. La condición de producción
+ * no es redundante: si alguien despliega con la variable puesta, el login de
+ * desarrollo simplemente no existe, en vez de quedar abierto.
+ *
+ * Falla cerrado, no ruidoso: lanzar una excepción al cargar el módulo rompería
+ * también `next build`, que fija NODE_ENV=production incluso en local.
+ */
+export function modoDevActivo(): boolean {
+  const pedido = process.env.APP_AUTH_DEV === '1'
+  if (pedido && process.env.NODE_ENV === 'production') {
+    console.error(
+      '[sesion] APP_AUTH_DEV=1 en producción: el login de desarrollo queda ' +
+        'DESACTIVADO. Configura Supabase Auth y quita la variable.',
+    )
+    return false
+  }
+  return pedido
 }
 
 function secreto(): string {

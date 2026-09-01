@@ -4,9 +4,9 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0, 1 y la interfaz web** completas. Ya se puede entrar, ver el
-catálogo de recetas costeado y abrir la ficha técnica de cualquier plato con el
-desglose por insumo.
+Estado: **fases 0, 1 y 2** completas. Se puede entrar, ver el catálogo de recetas
+costeado, importar el histórico de ventas desde un CSV y ver food cost, margen y
+**rentabilidad por canal** — con las comisiones de los agregadores descontadas.
 
 ## Puesta en marcha
 
@@ -34,6 +34,8 @@ npm test                # SQL + contexto de tenant + E2E
 |---|---|
 | `npm run test:db` | RLS estructural y de acceso, y el costeo contra cálculo manual |
 | `npm run test:contexto` | Que el contexto de tenant sea transaccional y no de sesión |
+| `npm run test:unit` | Parseo de importes LATAM y lectura del CSV, sin base de datos |
+| `npm run test:datos` | Importación completa y KPIs contra cálculo manual |
 | `npm run test:e2e` | Que la UI muestre los importes verificados y respete el aislamiento |
 
 ## Estructura
@@ -93,6 +95,29 @@ ciclo** en vez de colgarse o devolver un número inventado.
 con `vigente_desde`, nunca sobrescribe. Permite costear a cualquier fecha pasada
 y medir la inflación real del menú.
 
+**El costo de una venta se congela al importar.** Cada fila de `ventas` guarda el
+costo unitario y el porcentaje de comisión vigentes en ese momento, no
+referencias que se recalculen al consultar. Un mes ya reportado no debe cambiar
+de números porque hoy subió el tomate. Para las correcciones legítimas —una
+receta mal cargada— está `recalcular_costos_ventas(desde, hasta)`.
+
+Se congelan **dos** valores, no uno: la comisión de un agregador cambia con el
+tiempo igual que un precio, y renegociar con Rappi no debe reescribir el margen
+de los meses cerrados.
+
+**El emparejado de productos propone, no decide.** Cuando el texto del POS no
+coincide con ningún alias conocido, `pg_trgm` sugiere candidatos pero es una
+persona quien confirma. Un emparejado automático equivocado mete ventas en el
+plato erróneo y corrompe el food cost sin que nada falle de forma visible. Cada
+confirmación se guarda como alias: la próxima importación resuelve sola esa
+variante de escritura.
+
+**Un producto sin ficha técnica no muestra margen.** Calcularlo suponiendo costo
+cero lo pondría a la cabeza de la tabla como el más rentable del negocio. Se
+muestra un guion, y la **cobertura de costeo** —qué porcentaje de las ventas
+tiene costo conocido— aparece siempre junto al food cost. Un food cost calculado
+sobre el 88% de las ventas no es el food cost del negocio.
+
 **Las cantidades de receta son netas.** La merma de limpieza se aplica al
 costear: 800 g netos de papa con 20% de merma cuestan lo que cuesta 1 kg
 comprado. Es la diferencia entre un costo teórico bonito y uno real.
@@ -128,3 +153,23 @@ Lasaña (rinde 8 porciones)
 También se verifica la conversión entre dimensiones: el aceite de girasol se
 compra por litro y se mide en gramos, lo que exige densidad (0.92 g/ml); sin
 ella la función falla de forma explícita en vez de devolver un número mal.
+
+## Cómo se verifican los KPIs
+
+Igual que el costeo: los valores esperados se calculan de forma independiente al
+SQL y se contrastan. Sobre el CSV de ejemplo (`supabase/seed/ventas-ejemplo.csv`,
+deliberadamente sucio: separadores de miles, acentos inconsistentes, una fila
+vacía, un producto desconocido y un descuento ilegible):
+
+| Métrica | Valor | De dónde sale |
+|---|---|---|
+| Ventas | $ 484.800,00 | suma de importes menos descuentos |
+| Comisiones | $ 37.139,00 | 28% de Rappi y 25% de PedidosYa sobre sus ventas |
+| Materia prima | $ 88.467,71 | unidades × costo por porción a la fecha de venta |
+| Margen | $ 359.193,29 | ventas − comisiones − materia prima |
+| Food cost | 20,72 % | sobre las ventas **costeadas**, no sobre el total |
+| Cobertura | 88,08 % | el resto son cervezas sin receta cargada |
+
+El hallazgo que justifica la fase, también verificado a mano: una porción de
+lasaña deja $ 11.757,80 en salón y $ 7.965,07 por Rappi. La comisión se lleva
+$ 3.792,73 de cada porción.

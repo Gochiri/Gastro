@@ -14,6 +14,11 @@ psql_root() { psql -h "$PGHOST" -p "$PGPORT" -U postgres -v ON_ERROR_STOP=1 "$@"
 
 case "${1:-reset}" in
   reset)
+    # Cerrar las conexiones abiertas (el servidor de desarrollo mantiene un
+    # pool): sin esto, DROP DATABASE falla con "is being accessed by other users".
+    psql_root -d postgres -q -c "
+      select pg_terminate_backend(pid) from pg_stat_activity
+      where datname = '$DB' and pid <> pg_backend_pid();" >/dev/null
     psql_root -d postgres -q -c "drop database if exists $DB;" -c "create database $DB;"
     # El shim de auth va ANTES: las migraciones referencian auth.uid(), que en
     # Supabase existe de fábrica pero en un Postgres limpio hay que crear.
