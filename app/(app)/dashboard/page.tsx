@@ -5,6 +5,7 @@ import { organizacionActiva } from '@/consultas/recetas'
 import { margenPorCanal, margenPorProducto, periodoConDatos, resumen } from '@/consultas/kpis'
 import { formatearCantidad, formatearImporte, formatearPorcentaje } from '@/lib/formato'
 import { BarrasHorizontales, CifraPrincipal, Tarjeta } from '@/app/componentes/tarjetas'
+import { Explicador } from '@/app/componentes/explicador'
 
 export default async function Dashboard() {
   const usuario = await usuarioActual()
@@ -115,6 +116,8 @@ export default async function Dashboard() {
           }))}
         />
       </div>
+
+      <Explicador />
 
       <h2 className="mt-10 text-sm font-semibold uppercase tracking-wide text-stone-500">
         Margen por producto

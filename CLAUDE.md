@@ -81,3 +81,15 @@ Los tests comparten UN Postgres. `node --test` paraleliza archivos y Playwright
 paraleliza suites: ambos están forzados a serializar (`workers: 1`, invocaciones
 separadas por archivo). Cada archivo que escribe en la base la recrea en su
 `before`, así ninguno depende del orden.
+
+## Reglas del módulo de IA
+
+15. **El modelo nunca hace aritmética.** Toda cifra, incluidas las derivadas,
+    se calcula en SQL y viaja resuelta en el contexto.
+16. **Toda respuesta se audita** contra los valores del contexto. Las cifras sin
+    respaldo se registran y se muestran como advertencia, nunca se ocultan.
+17. **El auditor considera las lecturas ambiguas de un número** y solo marca si
+    ninguna coincide: una advertencia con falsos positivos se ignora.
+18. **La llamada al modelo es inyectable** (`Invocador`), para poder probar todo
+    lo demás sin credenciales.
+19. **Cada ejecución se registra** con tokens y costo, incluidos los fallos.

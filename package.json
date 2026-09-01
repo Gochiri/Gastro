@@ -11,14 +11,16 @@
     "test": "npm run test:db && npm run test:unit && npm run test:datos && npm run test:e2e",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test --test-concurrency=1 tests/numeros.test.mjs tests/csv.test.mjs",
-    "test:datos": "node --test tests/contexto-tenant.test.mjs && node --test tests/ventas.test.mjs && node --test tests/varianza.test.mjs"
+    "test:datos": "node --test tests/contexto-tenant.test.mjs && node --test tests/ventas.test.mjs && node --test tests/varianza.test.mjs && node --test tests/ia.test.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
     "next": "16.3.4",
     "papaparse": "^5.7.0",
     "pg": "^8.23.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

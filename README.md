@@ -4,7 +4,7 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 a 3** completas. Se puede costear el menú, importar el
+Estado: **fases 0 a 3** completas, más el primer widget de IA. Se puede costear el menú, importar el
 histórico de ventas, ver margen y rentabilidad por canal, y —lo que ningún Excel
 da— comparar lo que las recetas dicen que debió consumirse contra lo que
 realmente salió de la heladera.
@@ -228,3 +228,45 @@ Carne picada (merma 5%), ventas del período: 16 lasañas + 11 hamburguesas
 
 El informe debe reportar exactamente: desvío 2.000 g, explicado 500 g, **sin
 explicar 1.500 g = $13.500**. Y lo hace.
+
+## El widget de IA
+
+`lib/ia.ts` implementa el *explicador de resultados*: responde preguntas en
+lenguaje natural sobre las métricas del período.
+
+**El modelo no hace aritmética.** `consultas/contexto-ia.ts` arma el panorama
+con todo ya calculado en SQL —incluidas las cifras derivadas, como la brecha
+entre food cost teórico y real o el margen por unidad de cada canal— y el
+prompt prohíbe explícitamente operar con ellas. Un dashboard que informa un
+food cost inventado porque el modelo sumó mal destruye la confianza de forma
+irreversible.
+
+**Toda respuesta se audita.** `auditarCifras()` extrae los números de la
+respuesta y verifica que cada uno exista en el contexto. Los que no aparezcan se
+guardan en `ejecuciones_ia.cifras_no_respaldadas` y la interfaz muestra la
+respuesta **con una advertencia visible**, no la oculta.
+
+El auditor considera las dos lecturas posibles de un número ambiguo: `"1.500"`
+puede ser mil quinientos o uno coma cinco, y solo se marca si **ninguna**
+coincide con el contexto. La asimetría es deliberada — acusar de inventada una
+cifra correcta enseña a la gente a ignorar la advertencia, y entonces deja de
+servir para el caso que importa.
+
+**Configuración.** Requiere `ANTHROPIC_API_KEY` en el servidor. Sin ella el
+widget lo dice con claridad en vez de fallar de forma opaca. Usa
+`claude-opus-5` con pensamiento adaptativo, esfuerzo `medium`, salida
+estructurada validada con Zod y *prompt caching* sobre el bloque de
+instrucciones, que se repite en cada pregunta.
+
+**Costos.** Cada ejecución registra tokens de entrada, salida y lectura de
+caché, más el costo estimado en dólares. `vista_gasto_ia` los agrega por mes y
+organización, y cuenta cuántas respuestas citaron cifras sin respaldo.
+
+### Qué está verificado y qué no
+
+Este repositorio se desarrolló sin credenciales de API, así que **no hay una
+llamada real al modelo verificada**. Lo que sí está probado, con un invocador
+simulado (`tests/ia.test.mjs`): el constructor de contexto, la auditoría de
+cifras —incluidos los casos ambiguos—, el cálculo de costos y el registro. La
+llamada al modelo es un adaptador fino y aislado justamente para que el resto
+fuese testeable.
