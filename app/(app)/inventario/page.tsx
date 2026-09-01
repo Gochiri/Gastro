@@ -36,7 +36,10 @@ export default async function Inventario() {
       </div>
       <p className="mt-1 text-sm text-stone-600">
         No hace falta contar todo. Contá lo que importa —carnes, quesos— y el
-        informe te dirá qué parte del costo está cubriendo.
+        informe te dirá qué parte del costo está cubriendo.{' '}
+        <Link href="/inventario/stock" className="font-medium text-stone-900 underline">
+          Ver stock teórico y movimientos
+        </Link>
       </p>
 
       {par && (

@@ -4,6 +4,7 @@ import { usuarioActual } from '@/lib/sesion'
 import { organizacionActiva } from '@/consultas/recetas'
 import { margenPorCanal, margenPorProducto, periodoConDatos, resumen } from '@/consultas/kpis'
 import { primeCost } from '@/consultas/personal'
+import { resumenMermas } from '@/consultas/inventario'
 import { formatearCantidad, formatearImporte, formatearPorcentaje } from '@/lib/formato'
 import { BarrasHorizontales, CifraPrincipal, Tarjeta } from '@/app/componentes/tarjetas'
 import { Explicador } from '@/app/componentes/explicador'
@@ -31,11 +32,12 @@ export default async function Dashboard() {
     )
   }
 
-  const [datos, canales, productos, prime] = await Promise.all([
+  const [datos, canales, productos, prime, mermas] = await Promise.all([
     resumen(usuario, periodo),
     margenPorCanal(usuario, periodo),
     margenPorProducto(usuario, periodo),
     primeCost(usuario, periodo),
+    resumenMermas(usuario, periodo),
   ])
 
   const importe = (v: number): string =>
@@ -96,6 +98,36 @@ export default async function Dashboard() {
           testid="kpi-costo"
         />
       </div>
+
+      {/* Mermas sobre las ventas COSTEADAS, el mismo denominador que el food
+          cost: medirlas contra las ventas totales las haría parecer siempre más
+          chicas de lo que son, y dejaría de ser comparable con el resto. */}
+      <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+        <Tarjeta
+          etiqueta="Mermas"
+          valor={mermas.registros === 0 ? '—' : pct(mermas.mermasPct)}
+          nota={
+            mermas.registros === 0
+              ? 'Sin mermas registradas en el período'
+              : `${importe(mermas.costoMermas)} en ${mermas.registros} registro${mermas.registros === 1 ? '' : 's'}`
+          }
+          testid="kpi-mermas"
+        />
+      </div>
+
+      {/* Cero mermas registradas casi nunca significa cero desperdicio: casi
+          siempre significa que nadie las anota. Decirlo evita que el tablero
+          transmita una tranquilidad falsa. */}
+      {mermas.registros === 0 && (
+        <p
+          className="mt-3 rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-stone-600"
+          data-testid="aviso-sin-mermas"
+        >
+          No hay mermas registradas en el período. Eso rara vez quiere decir que
+          no hubo: sin registro, todo el desperdicio aparece después como
+          varianza sin explicar.
+        </p>
+      )}
 
       {coberturaParcial && (
         <p

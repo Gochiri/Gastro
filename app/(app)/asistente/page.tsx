@@ -6,6 +6,7 @@ import { periodoFinanciero } from '@/consultas/finanzas'
 import { coberturaMatriz, matrizMenu } from '@/consultas/widgets'
 import { formatearCantidad, formatearImporte, formatearPorcentaje } from '@/lib/formato'
 import { COLOR_CUADRANTE, ETIQUETA_CUADRANTE } from '@/app/componentes/cuadrantes'
+import { ScatterMenu } from '@/app/componentes/scatter-menu'
 import { NavAsistente } from './nav'
 import { PanelMenu } from './panel-menu'
 
@@ -76,7 +77,24 @@ export default async function Asistente() {
         </p>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
+          <ScatterMenu
+            puntos={matriz.map((f) => ({
+              id: f.productoId,
+              producto: f.producto,
+              popularidad: f.popularidadPct ?? 0,
+              margenUnitario: f.margenUnitario,
+              clasificacion: f.clasificacion,
+            }))}
+            umbralPopularidad={matriz[0].umbralPopularidadPct ?? 0}
+            margenReferencia={matriz[0].margenReferencia}
+            moneda={organizacion.moneda}
+            pais={organizacion.pais}
+          />
+
+          {/* La tabla no es redundante: es la vista de tabla que acompaña al
+              gráfico, y es la que se puede leer con un lector de pantalla o
+              copiar a una planilla. */}
+          <div className="mt-6 overflow-x-auto">
             <table className="w-full min-w-[46rem] border-collapse text-sm" data-testid="tabla-matriz">
               <thead>
                 <tr className="border-b border-stone-300 text-left text-stone-500">

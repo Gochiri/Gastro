@@ -60,6 +60,29 @@ const FICHAJES = [
   ['Lucía Bravo', '2026-02-07T09:00:00-03:00', null],
 ]
 
+/**
+ * Turnos PLANIFICADOS. Elegidos para que aparezcan las cinco situaciones que
+ * la comparación tiene que saber distinguir:
+ *   - en plan        (Marta 5 y 6, Diego 5 y 6, Lucía 5)
+ *   - excedido       (Marta el 7: se planificaron 6 h y fichó 8)
+ *   - por debajo     (Lucía el 6: se planificaron 8 h y fichó 6)
+ *   - ausente        (Marta el 8: turno planificado y nadie fichó)
+ *   - sin planificar (Diego el 7: fichó el turno de la noche sin plan)
+ * El turno de Lucía del 7 quedó con el fichaje abierto: se ve como 0 horas
+ * reales, y por eso la fila informa aparte cuántos fichajes sin cerrar hay.
+ */
+const TURNOS = [
+  ['Marta Ruiz',  '2026-02-05', '10:00', '18:00'],
+  ['Marta Ruiz',  '2026-02-06', '10:00', '18:00'],
+  ['Marta Ruiz',  '2026-02-07', '10:00', '16:00'],
+  ['Marta Ruiz',  '2026-02-08', '10:00', '18:00'],
+  ['Diego Paz',   '2026-02-05', '12:00', '20:00'],
+  ['Diego Paz',   '2026-02-06', '12:00', '20:00'],
+  ['Lucía Bravo', '2026-02-05', '09:00', '15:00'],
+  ['Lucía Bravo', '2026-02-06', '09:00', '17:00'],
+  ['Lucía Bravo', '2026-02-07', '09:00', '15:00'],
+]
+
 const admin = new pg.Pool({ connectionString: 'postgresql://postgres@localhost:5433/gastro' })
 const sql = async (t, p = []) => (await admin.query(t, p)).rows
 
@@ -194,6 +217,32 @@ async function main() {
   console.log(`conteo cierre:   ${idCierre}`)
   console.log(`faltante plantado: ${FALTANTE_CARNE_G} g de carne, ${MERMA_CARNE_G} g como merma`)
   console.log(`personal: ${EMPLEADOS.length} empleados, ${FICHAJES.length} fichajes (${abiertos} sin cerrar)`)
+
+  for (const [nombre, fecha, inicio, fin] of TURNOS) {
+    await sql(
+      `insert into turnos_planificados
+         (organizacion_id, sucursal_id, empleado_id, fecha, hora_inicio, hora_fin)
+       select $1, $2, e.id, $4::date, $5::time, $6::time
+       from empleados e where e.nombre = $3 and e.organizacion_id = $1`,
+      [ORG, SUCURSAL, nombre, fecha, inicio, fin],
+    )
+  }
+
+  // Una transferencia a Palermo, FUERA de la ventana entre los dos conteos: si
+  // cayera adentro cambiaría la varianza, y el faltante plantado dejaría de ser
+  // el caso limpio que verifican los tests de la fase 3.
+  await sql(
+    `insert into movimientos_manuales
+       (organizacion_id, tipo, insumo_id, fecha, cantidad, unidad_id,
+        sucursal_origen_id, sucursal_destino_id, motivo)
+     select $1, 'transferencia', i.id, '2026-02-09', 2000, i.unidad_base_id,
+            $2, '11111111-0000-0000-0000-000000000002',
+            'Faltó carne en Palermo para el fin de semana'
+     from insumos i where i.nombre = 'Carne picada' and i.organizacion_id = $1`,
+    [ORG, SUCURSAL],
+  )
+
+  console.log(`turnos planificados: ${TURNOS.length}, 1 transferencia entre sucursales`)
 }
 
 try {

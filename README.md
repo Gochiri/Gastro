@@ -4,7 +4,7 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 a 6 completas**, con los cinco widgets de IA. Se puede costear el menú, importar
+Estado: **plan maestro completo** — fases 0 a 6 y los cinco widgets de IA. Se puede costear el menú, importar
 el histórico de ventas, ver margen y rentabilidad por canal, cerrar el mes con
 EBITDA, punto de equilibrio y posición fiscal, y —lo que ningún Excel da—
 comparar lo que las recetas dicen que debió consumirse contra lo que realmente
@@ -536,3 +536,96 @@ que planta exactamente ese caso.
 
 **Nada se guarda sin confirmación humana.** Y si el rendimiento no estaba escrito
 en el texto, la pantalla lo dice: ese número divide el costo de toda la ficha.
+
+## Menu engineering, en gráfico
+
+La matriz se dibuja como scatter siguiendo la skill `dataviz`, y la decisión que
+más importa es la de color: **una sola serie, un solo tono**. Pintar cada
+cuadrante de un color distinto sería codificar con color lo que la *posición* ya
+codifica — el cuadrante de un plato es dónde cae respecto de las dos líneas de
+referencia, no un atributo aparte.
+
+Esa decisión además esquiva un problema real: en un scatter la validación de
+paleta corre sobre *todos* los pares, y ahí solo los tres primeros tonos de la
+paleta pasan los pisos de separación; el cuarto pone amarillo junto a naranja y
+no pasa. Con una serie no hay pares que validar. `validate_palette.js "#2a78d6"`
+da PASS en las cinco comprobaciones.
+
+El resto sale del mismo manual: punto de 9px con anillo del color de la
+superficie, área de acierto de 24px (un punto de 8px es un blanco imposible),
+grilla recesiva, etiquetas directas mientras los platos sean pocos, y la tabla
+que sigue al gráfico como vista accesible del mismo dato.
+
+## Turnos planificados
+
+El fichaje dice lo que pasó; el turno planificado, lo que se esperaba. La
+diferencia es lo único accionable: un costo laboral alto sin plan contra el cual
+medirlo es un dato, no una decisión.
+
+`plan_vs_real()` usa **FULL JOIN** a propósito, porque hay tres casos y un join
+común se comería dos: el desvío de horas, el turno planificado que nadie fichó
+(*ausente*) y el turno fichado sin plan (*sin planificar*) — que suele ser el más
+caro, porque son horas que nadie presupuestó.
+
+**El costo previsto usa la tarifa vigente y el real sale congelado del fichaje.**
+Es una asimetría deliberada: un turno que todavía no ocurrió no puede congelar
+nada. Se compara un presupuesto contra un hecho.
+
+Un fichaje sin cerrar aparece con cero horas reales, así que la fila informa
+aparte cuántos hay: sin eso, un turno abierto se lee como una ausencia.
+
+## Movimientos y stock teórico
+
+El plan pedía una tabla `movimientos_inventario`. Se implementó como **vista**:
+una compra ya existe en `compras` y una merma en `mermas`, y duplicarlas en un
+libro paralelo crea dos fuentes de verdad que se desincronizan el día que
+alguien corrige una fila de un solo lado. Lo único que necesitaba tabla propia
+son los ajustes y las transferencias, que no se derivan de nada.
+
+`stock_teorico(fecha)` responde qué *debería* haber: último conteo + entradas −
+salidas − consumo teórico. **Devuelve siempre la fecha del conteo base y los días
+transcurridos**, porque un stock calculado sobre un conteo de hace tres meses
+arrastra tres meses de error y presentarlo sin esa fecha le da una precisión que
+no tiene.
+
+### El riesgo que trajo la funcionalidad, y cómo se cerró
+
+Agregar transferencias sin tocar nada más habría metido un error silencioso en
+la métrica insignia del producto: mover carne de un local a otro habría aparecido
+como consumo sin explicar en el que la entregó. `varianza_periodo()` se
+redefinió para incluir el término:
+
+```
+consumo real = inventario inicial + compras + movimientos netos − inventario final
+```
+
+Y al escribir el test apareció un segundo problema, este preexistente: **la
+varianza no filtraba por sucursal**. Un conteo de Casa Central se comparaba
+contra las compras de toda la organización, y una transferencia interna se
+anulaba sola (la salida de un local y la entrada del otro suman cero). Ahora
+compras, mermas y movimientos se filtran por la sucursal de los conteos.
+
+## Mermas
+
+El KPI que faltaba del tablero. Se mide contra las **ventas costeadas**, el mismo
+denominador que el food cost: contra las ventas totales daría sistemáticamente
+más bajo y dejaría de ser comparable con el resto del tablero.
+
+Cuando no hay ninguna merma registrada el tablero no muestra un cero
+tranquilizador: dice que eso rara vez significa que no hubo desperdicio, y que
+sin registro todo termina apareciendo después como varianza sin explicar.
+
+## Dos cosas del plan que no se implementaron, y por qué
+
+**Vistas materializadas para los KPIs.** El plan las pedía por rendimiento. Con
+los volúmenes actuales las vistas normales resuelven en milisegundos y tienen
+una propiedad que las materializadas pierden: están siempre frescas. Materializar
+introduce una ventana en la que el tablero muestra números viejos y nadie se
+entera — exactamente el tipo de error que este proyecto viene evitando. El
+disparador para revisarlo es medible: cuando una consulta del tablero pase de
+~200 ms con datos reales de un cliente.
+
+**Una tabla `configuracion_fiscal` aparte.** Quedó como `organizaciones.config_fiscal`
+(jsonb) más `iva_pct` en producto e insumo. Es la misma información con menos
+piezas, y pone la alícuota donde de verdad vive: en el bien, no en una tabla de
+parámetros.

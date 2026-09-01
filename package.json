@@ -11,7 +11,7 @@
     "test": "npm run test:db && npm run test:unit && npm run test:datos && npm run test:e2e",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test --test-concurrency=1 tests/numeros.test.mjs tests/csv.test.mjs",
-    "test:datos": "node --test tests/contexto-tenant.test.mjs && node --test tests/ventas.test.mjs && node --test tests/varianza.test.mjs && node --test tests/personal.test.mjs && node --test tests/ordenes.test.mjs && node --test tests/finanzas.test.mjs && node --test tests/ia.test.mjs && node --test tests/widgets.test.mjs"
+    "test:datos": "node --test tests/contexto-tenant.test.mjs && node --test tests/ventas.test.mjs && node --test tests/varianza.test.mjs && node --test tests/personal.test.mjs && node --test tests/ordenes.test.mjs && node --test tests/finanzas.test.mjs && node --test tests/ia.test.mjs && node --test tests/widgets.test.mjs && node --test tests/plan-stock.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",

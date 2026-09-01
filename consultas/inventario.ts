@@ -253,3 +253,113 @@ export async function insumosParaSelector(usuarioId: string): Promise<InsumoOpci
     unidadBaseId: f.unidad_id,
   }))
 }
+
+// ---------------------------------------------------------------------------
+// Movimientos y stock teórico
+// ---------------------------------------------------------------------------
+
+export interface Movimiento {
+  fecha: string
+  tipo: string
+  insumo: string
+  unidad: string
+  cantidad: number
+  detalle: string
+  sucursal: string | null
+}
+
+export interface FilaStock {
+  insumoId: string
+  insumo: string
+  unidad: string
+  conteoBase: string
+  diasDesdeConteo: number
+  cantidadContada: number
+  entradas: number
+  salidas: number
+  consumoTeorico: number
+  stock: number
+  valuacion: number | null
+}
+
+export interface ResumenMermas {
+  costoMermas: number
+  ventasCosteadas: number
+  mermasPct: number | null
+  registros: number
+  porMotivo: Record<string, number>
+}
+
+const n2 = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v))
+const n2Opc = (v: unknown): number | null =>
+  v === null || v === undefined ? null : Number(v)
+
+export async function stockTeorico(usuarioId: string, fecha: string): Promise<FilaStock[]> {
+  const filas = await consultar<Record<string, unknown>>(
+    usuarioId,
+    // Igual que en plan_vs_real: la fecha se convierte en SQL, no en JS.
+    `select insumo_id, insumo, unidad, conteo_base::text as conteo_base,
+            dias_desde_conteo, cantidad_contada, entradas, salidas,
+            consumo_teorico, stock, valuacion
+     from stock_teorico($1::date)`,
+    [fecha],
+  )
+  return filas.map((f) => ({
+    insumoId: String(f.insumo_id),
+    insumo: String(f.insumo),
+    unidad: String(f.unidad),
+    conteoBase: String(f.conteo_base),
+    diasDesdeConteo: n2(f.dias_desde_conteo),
+    cantidadContada: n2(f.cantidad_contada),
+    entradas: n2(f.entradas),
+    salidas: n2(f.salidas),
+    consumoTeorico: n2(f.consumo_teorico),
+    stock: n2(f.stock),
+    valuacion: n2Opc(f.valuacion),
+  }))
+}
+
+export async function movimientos(
+  usuarioId: string,
+  periodo: { desde: string; hasta: string },
+): Promise<Movimiento[]> {
+  return withTenant(usuarioId, async (cliente) => {
+    const { rows } = await cliente.query<Record<string, unknown>>(
+      `select m.fecha::text as fecha, m.tipo, m.insumo, m.unidad, m.cantidad,
+              m.detalle, s.nombre as sucursal
+       from vista_movimientos_inventario m
+       left join sucursales s on s.id = m.sucursal_id
+       where m.fecha between $1::date and $2::date
+       order by m.fecha desc, m.insumo, m.tipo`,
+      [periodo.desde, periodo.hasta],
+    )
+    return rows.map((r) => ({
+      fecha: String(r.fecha),
+      tipo: String(r.tipo),
+      insumo: String(r.insumo),
+      unidad: String(r.unidad),
+      cantidad: n2(r.cantidad),
+      detalle: String(r.detalle),
+      sucursal: (r.sucursal as string) ?? null,
+    }))
+  })
+}
+
+export async function resumenMermas(
+  usuarioId: string,
+  periodo: { desde: string; hasta: string },
+): Promise<ResumenMermas> {
+  const filas = await consultar<Record<string, unknown>>(
+    usuarioId,
+    'select * from resumen_mermas($1::date, $2::date)',
+    [periodo.desde, periodo.hasta],
+  )
+  const r = filas[0] ?? {}
+  return {
+    costoMermas: n2(r.costo_mermas),
+    ventasCosteadas: n2(r.ventas_costeadas),
+    mermasPct: n2Opc(r.mermas_pct),
+    registros: n2(r.registros),
+    porMotivo: (r.por_motivo as Record<string, number>) ?? {},
+  }
+}

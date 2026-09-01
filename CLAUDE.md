@@ -144,3 +144,17 @@ separadas por archivo). Cada archivo que escribe en la base la recrea en su
     similitud ≥ 0,6.
 37. **Un producto sin ficha técnica no entra a la matriz de menu engineering**,
     ni al numerador ni al denominador.
+
+## Reglas de turnos, movimientos y gráficos
+
+38. **La varianza se calcula sobre la sucursal de sus conteos.** Compras, mermas
+    y movimientos se filtran por esa sucursal; sin el filtro, una transferencia
+    interna se anula sola.
+39. **Todo movimiento manual entra en la ecuación de consumo real.** Mover
+    mercadería entre locales no es consumirla.
+40. **El stock teórico informa siempre su conteo base y los días transcurridos.**
+41. **El costo de un turno planificado usa la tarifa vigente; el de un fichaje,
+    la congelada.** Es un presupuesto contra un hecho, y se dice en pantalla.
+42. **Antes de escribir cualquier gráfico se carga la skill `dataviz`**, y la
+    paleta se valida con su script en vez de estimarla a ojo.
+43. **No se codifica con color lo que la posición ya codifica.**

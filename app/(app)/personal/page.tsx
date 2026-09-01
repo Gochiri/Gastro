@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { usuarioActual } from '@/lib/sesion'
 import { organizacionActiva } from '@/consultas/recetas'
@@ -28,7 +29,10 @@ export default async function Personal() {
       <h1 className="text-xl font-semibold tracking-tight">Personal</h1>
       <p className="mt-1 text-sm text-stone-600">
         El costo de una hora incluye las cargas sociales. Sin ellas, el costo
-        laboral sale casi un tercio más bajo de lo que realmente es.
+        laboral sale casi un tercio más bajo de lo que realmente es.{' '}
+        <Link href="/personal/turnos" className="font-medium text-stone-900 underline">
+          Planificar turnos y ver el desvío
+        </Link>
       </p>
 
       {/* --- Fichaje: la pantalla de uso diario ------------------------- */}

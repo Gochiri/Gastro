@@ -116,3 +116,121 @@ export async function primeCost(
     }
   })
 }
+
+// ---------------------------------------------------------------------------
+// Turnos planificados
+// ---------------------------------------------------------------------------
+
+export interface TurnoPlanificado {
+  id: string
+  empleado: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  horas: number
+  costoEstimado: number
+}
+
+export interface FilaPlanVsReal {
+  empleado: string
+  fecha: string
+  horasPlan: number
+  horasReales: number
+  desvioHoras: number
+  costoPlan: number
+  costoReal: number
+  desvioDinero: number
+  situacion: 'en_plan' | 'excedido' | 'por_debajo' | 'ausente' | 'sin_planificar'
+  fichajesAbiertos: number
+}
+
+export interface ResumenPlan {
+  horasPlan: number
+  horasReales: number
+  desvioHoras: number
+  costoPlan: number
+  costoReal: number
+  desvioDinero: number
+  desvioPct: number | null
+  diasEnPlan: number
+  diasExcedidos: number
+  diasPorDebajo: number
+  ausencias: number
+  sinPlanificar: number
+}
+
+export async function listarTurnos(usuarioId: string): Promise<TurnoPlanificado[]> {
+  const filas = await consultar<Record<string, unknown>>(
+    usuarioId,
+    `select id, empleado, fecha::text as fecha,
+            to_char(hora_inicio, 'HH24:MI') as hora_inicio,
+            to_char(hora_fin, 'HH24:MI')    as hora_fin,
+            horas, costo_estimado
+     from vista_turnos order by fecha desc, hora_inicio`,
+  )
+  return filas.map((f) => ({
+    id: String(f.id),
+    empleado: String(f.empleado),
+    fecha: String(f.fecha),
+    horaInicio: String(f.hora_inicio),
+    horaFin: String(f.hora_fin),
+    horas: num(f.horas),
+    costoEstimado: num(f.costo_estimado),
+  }))
+}
+
+export async function planVsReal(
+  usuarioId: string,
+  periodo: { desde: string; hasta: string },
+): Promise<FilaPlanVsReal[]> {
+  const filas = await consultar<Record<string, unknown>>(
+    usuarioId,
+    // La fecha se castea en SQL: `pg` devuelve un `date` como objeto Date de
+    // JavaScript, y String(new Date(...)) da "Sun Feb 08 2026 ...". Cortar eso
+    // a diez caracteres produce "Sun Feb 0", que es exactamente el tipo de
+    // error que no falla, solo queda mal.
+    `select empleado_id, empleado, fecha::text as fecha,
+            horas_plan, horas_reales, desvio_horas,
+            costo_plan, costo_real, desvio_dinero, situacion, fichajes_abiertos
+     from plan_vs_real($1::date, $2::date)`,
+    [periodo.desde, periodo.hasta],
+  )
+  return filas.map((f) => ({
+    empleado: String(f.empleado),
+    fecha: String(f.fecha),
+    horasPlan: num(f.horas_plan),
+    horasReales: num(f.horas_reales),
+    desvioHoras: num(f.desvio_horas),
+    costoPlan: num(f.costo_plan),
+    costoReal: num(f.costo_real),
+    desvioDinero: num(f.desvio_dinero),
+    situacion: String(f.situacion) as FilaPlanVsReal['situacion'],
+    fichajesAbiertos: num(f.fichajes_abiertos),
+  }))
+}
+
+export async function resumenPlan(
+  usuarioId: string,
+  periodo: { desde: string; hasta: string },
+): Promise<ResumenPlan> {
+  const filas = await consultar<Record<string, unknown>>(
+    usuarioId,
+    'select * from resumen_plan_vs_real($1::date, $2::date)',
+    [periodo.desde, periodo.hasta],
+  )
+  const r = filas[0] ?? {}
+  return {
+    horasPlan: num(r.horas_plan),
+    horasReales: num(r.horas_reales),
+    desvioHoras: num(r.desvio_horas),
+    costoPlan: num(r.costo_plan),
+    costoReal: num(r.costo_real),
+    desvioDinero: num(r.desvio_dinero),
+    desvioPct: numOpc(r.desvio_pct),
+    diasEnPlan: num(r.dias_en_plan),
+    diasExcedidos: num(r.dias_excedidos),
+    diasPorDebajo: num(r.dias_por_debajo),
+    ausencias: num(r.ausencias),
+    sinPlanificar: num(r.sin_planificar),
+  }
+}
