@@ -128,3 +128,19 @@ separadas por archivo). Cada archivo que escribe en la base la recrea en su
 31. **En el comparativo de sucursales, los gastos prorrateados van en columna
     aparte de los asignados**, y la suma de los EBITDA por sucursal tiene que dar
     el EBITDA de la organización.
+
+## Reglas de los widgets de IA
+
+32. **Todo widget se ejecuta por `ejecutarWidget()`**, nunca llamando al SDK
+    directo. Ahí viven la auditoría de cifras, el costo y el registro.
+33. **La clasificación y la detección se hacen en SQL.** El modelo interpreta,
+    prioriza y recomienda; no clasifica un plato ni encuentra una anomalía.
+34. **Cada señal informa su umbral.** Un aviso que no dice contra qué vara se
+    midió no se puede discutir.
+35. **El widget de redes no inventa precios ni anuncia promociones.** Una
+    promoción va en su campo aparte, con el margen que se resigna.
+36. **El asistente de escandallos no estima cantidades ni elige insumos**, y
+    nada se guarda sin confirmación humana. Se preselecciona un insumo solo con
+    similitud ≥ 0,6.
+37. **Un producto sin ficha técnica no entra a la matriz de menu engineering**,
+    ni al numerador ni al denominador.

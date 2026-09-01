@@ -49,6 +49,9 @@ export default async function LayoutApp({ children }: { children: React.ReactNod
             <Link href="/finanzas" className="text-stone-600 hover:text-stone-900">
               Finanzas
             </Link>
+            <Link href="/asistente" className="text-stone-600 hover:text-stone-900">
+              Asistente
+            </Link>
           </nav>
           <form action={salir} className="ml-auto">
             <button type="submit" className="text-sm text-stone-500 hover:text-stone-900">

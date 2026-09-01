@@ -4,17 +4,24 @@ import { z } from 'zod'
 import type { ContextoNegocio } from '../consultas/contexto-ia.ts'
 
 /**
- * Cliente de IA para los widgets.
+ * Plataforma de widgets de IA.
  *
  * Se ejecuta SOLO en el servidor: la clave nunca llega al navegador.
  *
- * Dos garantías de diseño:
+ * Tres garantías de diseño, iguales para todos los widgets:
+ *
  *   1. El modelo recibe métricas ya calculadas y tiene prohibido operar con
  *      ellas. Todo lo que podría necesitar —incluidas las diferencias y los
- *      porcentajes— viene resuelto en el contexto.
+ *      porcentajes— viene resuelto en el contexto. En los widgets analíticos
+ *      la clasificación y la detección también se hacen en SQL: el modelo
+ *      interpreta y recomienda, no encuentra ni calcula.
+ *
  *   2. Cada respuesta se audita: se extraen sus números y se verifican contra
  *      los del contexto. Los que no aparezcan se registran y se muestran como
  *      advertencia. La confianza en un producto financiero no se recupera.
+ *
+ *   3. Nada que el modelo produzca se guarda solo. El asistente de escandallos
+ *      arma un borrador; la ficha técnica la crea una persona.
  */
 
 export const MODELO = 'claude-opus-5'
@@ -46,8 +53,8 @@ export const EsquemaRespuesta = z.object({
 
 export type RespuestaIa = z.infer<typeof EsquemaRespuesta>
 
-export interface ResultadoIa {
-  respuesta: RespuestaIa
+export interface ResultadoIa<T = RespuestaIa> {
+  respuesta: T
   cifrasNoRespaldadas: number[]
   tokensEntrada: number
   tokensSalida: number
@@ -57,17 +64,27 @@ export interface ResultadoIa {
   modelo: string
 }
 
-const INSTRUCCIONES = `Sos el analista de un sistema de gestión gastronómica. Respondés preguntas del dueño de un restaurante sobre los resultados de su negocio.
+/**
+ * Reglas que valen para TODOS los widgets, y que encabezan cada prompt.
+ *
+ * Van primero y en un bloque estable porque es el bloque que se cachea: se
+ * repite idéntico en cada llamada de cada widget.
+ */
+export const REGLAS_COMUNES = `Trabajás dentro de un sistema de gestión gastronómica, para el dueño de un restaurante de LATAM.
 
 REGLA ABSOLUTA: no calculás nada. Todas las cifras que necesitás ya vienen resueltas en el contexto, incluidas las diferencias y los porcentajes. Está terminantemente prohibido sumar, restar, promediar o estimar un número que no esté literalmente en el contexto. Si para responder hiciera falta una cifra que no está, decilo y marcá datos_insuficientes.
 
-Cómo responder:
+Cómo escribir:
 - Citá las cifras tal como aparecen en el contexto, sin redondearlas ni reexpresarlas.
-- Hablá en español rioplatense, directo y sin adornos. Nada de "es importante destacar".
+- Español rioplatense, directo y sin adornos. Nada de "es importante destacar".
 - Si la cobertura de costeo es menor al 100%, aclarálo cuando hables de food cost: ese número cubre solo parte del negocio.
-- Si la cobertura del conteo de inventario es parcial, el food cost real es una estimación y hay que decirlo.
 - Un producto con margen null no tiene ficha técnica cargada: no es que su margen sea cero, es que se desconoce. Nunca lo presentes como el más rentable.
-- Si los datos no alcanzan para responder, decilo. Es preferible a inventar.`
+- Si los datos no alcanzan, decilo. Es preferible a inventar.`
+
+const INSTRUCCIONES_EXPLICADOR = `Sos el analista del sistema. Respondés preguntas del dueño sobre los resultados de su negocio.
+
+- Si la cobertura del conteo de inventario es parcial, el food cost real es una estimación y hay que decirlo.
+- Respondé la pregunta que te hicieron, no la que te habría gustado que te hicieran.`
 
 /**
  * Todos los valores numéricos de un objeto, aplanados.
@@ -186,54 +203,76 @@ export function auditarCifras(texto: string, contexto: unknown): number[] {
   return sinRespaldo
 }
 
-function textoAuditable(r: RespuestaIa): string {
-  return [
-    r.respuesta,
-    ...r.hallazgos.flatMap((h) => [h.titulo, h.detalle]),
-    ...r.recomendaciones,
-  ].join('\n')
+/**
+ * Definición de un widget: lo único que cambia entre uno y otro.
+ *
+ * El ejecutor es el mismo para todos, y por lo tanto la auditoría de cifras,
+ * el cálculo de costo y el manejo de una negativa del modelo también lo son.
+ * Un widget nuevo no puede "olvidarse" de auditar.
+ */
+export interface DefinicionWidget<T> {
+  clave: string
+  nombre: string
+  instrucciones: string
+  esquema: z.ZodType<T>
+  esfuerzo: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  /** El texto libre de la respuesta, que es lo que se audita. */
+  auditable: (respuesta: T) => string
 }
 
 /** La llamada al modelo, aislada para poder sustituirla en tests. */
-export type Invocador = (args: {
+export type Invocador = <T>(args: {
   sistema: string
   contexto: string
-  pregunta: string
+  entrada: string
   esfuerzo: string
+  esquema: z.ZodType<T>
 }) => Promise<{
-  respuesta: RespuestaIa
+  respuesta: T
   tokensEntrada: number
   tokensSalida: number
   tokensCacheLectura: number
   modelo: string
 }>
 
-const invocadorReal: Invocador = async ({ sistema, contexto, pregunta, esfuerzo }) => {
+const invocadorReal: Invocador = async <T,>({
+  sistema,
+  contexto,
+  entrada,
+  esfuerzo,
+  esquema,
+}: {
+  sistema: string
+  contexto: string
+  entrada: string
+  esfuerzo: string
+  esquema: z.ZodType<T>
+}) => {
   const cliente = new Anthropic()
 
   const mensaje = await cliente.messages.parse({
     model: MODELO,
-    max_tokens: 4000,
+    max_tokens: 8000,
     system: [
-      // El bloque estable va primero y se cachea: se repite en cada pregunta.
+      // El bloque estable va primero y se cachea: se repite en cada llamada.
       { type: 'text', text: sistema, cache_control: { type: 'ephemeral' } },
     ],
     thinking: { type: 'adaptive' },
     output_config: {
       effort: esfuerzo as 'low' | 'medium' | 'high' | 'xhigh' | 'max',
-      format: zodOutputFormat(EsquemaRespuesta),
+      format: zodOutputFormat(esquema as z.ZodType<object>),
     },
     messages: [
       {
         role: 'user',
-        content: `Contexto del período (todas las cifras ya calculadas):\n\n${contexto}\n\nPregunta: ${pregunta}`,
+        content: `Contexto (todas las cifras ya calculadas):\n\n${contexto}\n\n${entrada}`,
       },
     ],
   })
 
   if (mensaje.stop_reason === 'refusal') {
     throw new Error(
-      'El modelo declinó responder esta consulta. Probá reformular la pregunta.',
+      'El modelo declinó responder esta consulta. Probá reformular el pedido.',
     )
   }
   if (!mensaje.parsed_output) {
@@ -241,7 +280,7 @@ const invocadorReal: Invocador = async ({ sistema, contexto, pregunta, esfuerzo 
   }
 
   return {
-    respuesta: mensaje.parsed_output,
+    respuesta: mensaje.parsed_output as T,
     tokensEntrada: mensaje.usage.input_tokens ?? 0,
     tokensSalida: mensaje.usage.output_tokens ?? 0,
     tokensCacheLectura: mensaje.usage.cache_read_input_tokens ?? 0,
@@ -249,22 +288,35 @@ const invocadorReal: Invocador = async ({ sistema, contexto, pregunta, esfuerzo 
   }
 }
 
-export async function explicarKpis(
-  contexto: ContextoNegocio,
-  pregunta: string,
-  opciones: { esfuerzo?: string; invocador?: Invocador } = {},
-): Promise<ResultadoIa> {
+/**
+ * Ejecuta un widget: arma el prompt, llama al modelo, audita la respuesta y
+ * calcula el costo.
+ *
+ * `contexto` cumple dos funciones a la vez, y es deliberado: es lo que se le
+ * pasa al modelo Y el conjunto de cifras contra el que se audita su respuesta.
+ * Así no puede existir un widget cuyo contexto y cuya auditoría se desincronicen.
+ */
+export async function ejecutarWidget<T>(
+  definicion: DefinicionWidget<T>,
+  contexto: unknown,
+  entrada: string,
+  opciones: { esfuerzo?: DefinicionWidget<T>['esfuerzo']; invocador?: Invocador } = {},
+): Promise<ResultadoIa<T>> {
   const invocador = opciones.invocador ?? invocadorReal
   const arranque = Date.now()
 
-  const salida = await invocador({
-    sistema: INSTRUCCIONES,
+  const salida = await invocador<T>({
+    sistema: `${REGLAS_COMUNES}\n\n${definicion.instrucciones}`,
     contexto: JSON.stringify(contexto, null, 2),
-    pregunta,
-    esfuerzo: opciones.esfuerzo ?? 'medium',
+    entrada,
+    esfuerzo: opciones.esfuerzo ?? definicion.esfuerzo,
+    esquema: definicion.esquema,
   })
 
-  const cifrasNoRespaldadas = auditarCifras(textoAuditable(salida.respuesta), contexto)
+  const cifrasNoRespaldadas = auditarCifras(
+    definicion.auditable(salida.respuesta),
+    contexto,
+  )
 
   const costoUsd =
     (salida.tokensEntrada / 1_000_000) * USD_POR_MTOK_ENTRADA +
@@ -280,6 +332,32 @@ export async function explicarKpis(
     duracionMs: Date.now() - arranque,
     modelo: salida.modelo,
   }
+}
+
+// ---------------------------------------------------------------------------
+// Widget 1: explicador de resultados
+// ---------------------------------------------------------------------------
+
+export const WIDGET_EXPLICADOR: DefinicionWidget<RespuestaIa> = {
+  clave: 'explicador-kpis',
+  nombre: 'Explicador de resultados',
+  instrucciones: INSTRUCCIONES_EXPLICADOR,
+  esquema: EsquemaRespuesta,
+  esfuerzo: 'medium',
+  auditable: (r) =>
+    [
+      r.respuesta,
+      ...r.hallazgos.flatMap((h) => [h.titulo, h.detalle]),
+      ...r.recomendaciones,
+    ].join('\n'),
+}
+
+export async function explicarKpis(
+  contexto: ContextoNegocio,
+  pregunta: string,
+  opciones: { esfuerzo?: DefinicionWidget<RespuestaIa>['esfuerzo']; invocador?: Invocador } = {},
+): Promise<ResultadoIa<RespuestaIa>> {
+  return ejecutarWidget(WIDGET_EXPLICADOR, contexto, `Pregunta: ${pregunta}`, opciones)
 }
 
 export function hayCredenciales(): boolean {

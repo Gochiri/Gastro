@@ -4,7 +4,7 @@ SaaS multi-negocio para restaurantes pequeños y medianos de LATAM. Responde la
 pregunta que ningún Excel les responde: **cuánto cuesta realmente cada plato, y
 en qué se va la diferencia entre lo que debería costar y lo que costó.**
 
-Estado: **fases 0 a 4 y 6** completas, más el primer widget de IA. Se puede costear el menú, importar
+Estado: **fases 0 a 6 completas**, con los cinco widgets de IA. Se puede costear el menú, importar
 el histórico de ventas, ver margen y rentabilidad por canal, cerrar el mes con
 EBITDA, punto de equilibrio y posición fiscal, y —lo que ningún Excel da—
 comparar lo que las recetas dicen que debió consumirse contra lo que realmente
@@ -230,10 +230,23 @@ Carne picada (merma 5%), ventas del período: 16 lasañas + 11 hamburguesas
 El informe debe reportar exactamente: desvío 2.000 g, explicado 500 g, **sin
 explicar 1.500 g = $13.500**. Y lo hace.
 
-## El widget de IA
+## Los widgets de IA
 
-`lib/ia.ts` implementa el *explicador de resultados*: responde preguntas en
-lenguaje natural sobre las métricas del período.
+`lib/ia.ts` es la plataforma: un ejecutor genérico y cinco definiciones de
+widget en `lib/widgets/`. La auditoría de cifras, el cálculo de costo y el
+registro de la ejecución son del ejecutor, no de cada widget — un widget nuevo
+no puede olvidarse de auditar.
+
+| Widget | Qué hace | Qué calcula el SQL |
+|---|---|---|
+| Explicador de resultados | Responde preguntas sobre las métricas del período | Todas las métricas |
+| Analista de menú | Recomienda qué hacer con cada plato | La clasificación Kasavana-Smith |
+| Detector de anomalías | Prioriza señales y propone cómo confirmarlas | **La detección entera** |
+| Ideas para redes | Plan semanal de contenido | Qué plato conviene empujar |
+| Asistente de escandallos | Texto libre a ficha técnica | El emparejado con el catálogo |
+
+El primero responde preguntas en lenguaje natural sobre las métricas del
+período.
 
 **El modelo no hace aritmética.** `consultas/contexto-ia.ts` arma el panorama
 con todo ya calculado en SQL —incluidas las cifras derivadas, como la brecha
@@ -425,3 +438,101 @@ hay que ver.
 **Invariante verificado por test: la suma de los EBITDA por sucursal es el EBITDA
 de la organización.** Un comparativo que no cierra contra el total no sirve para
 decidir nada.
+
+## Menu engineering
+
+`matriz_menu(desde, hasta)` clasifica cada plato cruzando popularidad y margen
+(Kasavana-Smith): estrella, vaca lechera, rompecabezas o perro. Cada cuadrante
+pide una acción distinta, y confundir un perro con una vaca lechera lleva a
+retirar el plato que sostiene el volumen.
+
+**El margen se compara por UNIDAD, no por porcentaje.** Un plato con 70% de
+margen sobre $2.000 deja menos que uno con 30% sobre $12.000, y la carta se
+diseña con pesos. La vara es el margen unitario *ponderado* del conjunto: un
+plato que se vendió una vez no puede pesar lo mismo que uno que se vendió cien
+veces al fijar el umbral de todos.
+
+**Un producto sin ficha técnica no entra ni al numerador ni al denominador.**
+Con margen cero quedaría clasificado como perro y llevaría a retirar un plato
+que quizás sea el más rentable; y sus unidades, si contaran, bajarían la
+participación de todos los demás y moverían el umbral. Lo que queda afuera se
+informa al lado de la matriz.
+
+**Una clasificación al borde del umbral no es un veredicto.** La matriz devuelve
+la distancia a cada umbral, y la pantalla marca «en el borde» a los platos que
+están a menos del 10%: en el escenario de ejemplo la hamburguesa queda a $67 de
+ser estrella en vez de vaca, y presentar eso como una categoría cerrada sería
+mentir con un dato cierto.
+
+## Detección de anomalías
+
+**La detección es SQL, no es el modelo.** Un detector donde el modelo mira una
+tabla de números y opina cuál le llama la atención no es reproducible, no es
+auditable, y un día deja de avisar sin que nadie se entere. `deteccion_anomalias()`
+aplica siete reglas con umbrales explícitos —expuestos en pantalla, porque un
+aviso que no dice contra qué vara se midió no se puede discutir— y calcula el
+impacto en dinero de cada señal.
+
+El modelo hace lo que la regla no puede: priorizar entre cosas de naturaleza
+distinta, proponer causas y decir cómo confirmarlas.
+
+**Las señales se ordenan por dinero, no por porcentaje.** Sobre el escenario de
+ejemplo eso pone la suba del 37,5% del tomate ($793) por debajo del faltante del
+40,95% de carne ($13.500) y de la hamburguesa que por Rappi retiene apenas el
+52% de su margen ($13.520).
+
+**Una señal no es un diagnóstico.** Un faltante de inventario puede ser robo,
+porciones grandes, merma sin registrar o un conteo mal hecho. El widget devuelve
+causas posibles y cómo distinguirlas; nunca acusa. Y devuelve también sus
+propios falsos positivos: un detector que grita por todo se apaga a la semana.
+
+Hay una señal que vale la pena señalar aparte: **`precio_futuro`**, una suba ya
+cargada que rige después del período. Todavía no dolió, y por eso mismo es el
+único aviso que llega a tiempo para renegociar o ajustar la carta.
+
+## Ideas para redes
+
+Sigue las convenciones de las skills `calendario-contenido` y
+`copywriting-latam`: hooks de menos de quince palabras, títulos de hasta 60
+caracteres, variedad obligatoria de pilar y formato, CTAs con fórmula verbo +
+beneficio, WhatsApp como canal, y autenticidad antes que hype.
+
+**El aporte propio es cuál plato promocionar.** Se alimenta de la matriz: la
+prioridad son los *rompecabezas* —margen alto y poca venta, donde el contenido
+rinde más— y explícitamente **no** las vacas lecheras, porque vender más de algo
+que deja poco empeora el resultado.
+
+**No inventa precios y no anuncia promociones.** Un precio que aparezca en una
+pieza tiene que ser el del contexto. Una promoción es una decisión del dueño, no
+de copy: si el widget quiere proponer una, va en un campo aparte, con el margen
+que se resigna dicho de frente, y ninguna de las piezas la menciona.
+
+El aviso de cifras sin respaldo cambia de texto en esta pantalla, y no es un
+detalle: en un widget analítico una cifra sin respaldo es un error de cálculo;
+acá es algo que el negocio va a publicar bajo su propio nombre. Que el sistema
+no pueda respaldar «48 horas de fermentación» no la vuelve falsa, la vuelve
+verificable.
+
+## Asistente de escandallos
+
+Convierte una receta escrita en texto libre en un borrador de ficha técnica.
+Es el único widget que produce algo guardable, y por eso el más restringido:
+
+**El modelo solo estructura.** No agrega ingredientes que el texto no menciona
+por más que la receta clásica los lleve, y **no estima cantidades**: si dice
+«sal a gusto», la cantidad queda en null y el motivo en la nota. Un gramaje
+inventado se convierte en un costo inventado y de ahí en un precio de venta mal
+calculado.
+
+**El emparejado con el catálogo lo hace el trigrama de Postgres**, igual que en
+el importador de ventas. Y solo se preselecciona con similitud ≥ 0,6:
+preseleccionar mal es peor que no preseleccionar, porque la persona confirma sin
+mirar y el costo equivocado entra sin que nada avise. Por debajo de ese umbral la
+línea queda sin elegir y el botón de guardar no se habilita.
+
+**La auditoría de cifras es contra el texto de entrada**, no contra la base:
+acá «inventar» es agregar un gramaje que la persona nunca escribió, y hay un test
+que planta exactamente ese caso.
+
+**Nada se guarda sin confirmación humana.** Y si el rendimiento no estaba escrito
+en el texto, la pantalla lo dice: ese número divide el costo de toda la ficha.

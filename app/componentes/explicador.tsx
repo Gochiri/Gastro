@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react'
 import { preguntar, type EstadoExplicacion } from '../(app)/dashboard/acciones'
+import { COLOR_SEVERIDAD } from './cuadrantes'
 
 const INICIAL: EstadoExplicacion = {}
 
@@ -10,12 +11,6 @@ const SUGERENCIAS = [
   '¿Me conviene seguir vendiendo por delivery?',
   '¿Qué plato debería revisar primero?',
 ]
-
-const COLOR_SEVERIDAD: Record<string, string> = {
-  informativo: 'border-stone-200 bg-white',
-  atencion: 'border-amber-200 bg-amber-50',
-  urgente: 'border-red-200 bg-red-50',
-}
 
 export function Explicador() {
   const [estado, accion, pendiente] = useActionState(preguntar, INICIAL)
