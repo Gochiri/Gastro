@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+# Artefactos de Playwright: trazas, capturas y estado de la última corrida.
+# Sin esto, un `git add -A` tras un test fallido se lleva las trazas al repo.
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
