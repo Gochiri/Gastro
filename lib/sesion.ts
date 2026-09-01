@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 
 /**
  * Sesión del usuario.
@@ -13,26 +13,80 @@ import { cookies } from 'next/headers'
 
 const NOMBRE_COOKIE = 'sesion'
 
+/** Anfitriones y direcciones que son la propia máquina. */
+const ANFITRIONES_LOCALES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+
+function sinPuerto(valor: string): string {
+  // IPv6 llega entre corchetes: "[::1]:3000".
+  return (valor.startsWith('[')
+    ? valor.slice(0, valor.indexOf(']') + 1)
+    : valor.split(':')[0]
+  ).toLowerCase()
+}
+
+function esLocal(valor: string | null): boolean {
+  return valor !== null && ANFITRIONES_LOCALES.has(sinPuerto(valor.trim()))
+}
+
 /**
  * Si el login de desarrollo está activo.
  *
- * Exige APP_AUTH_DEV=1 **y** que no sea producción. La condición de producción
- * no es redundante: si alguien despliega con la variable puesta, el login de
- * desarrollo simplemente no existe, en vez de quedar abierto.
+ * Exige APP_AUTH_DEV=1. Fuera de producción con eso alcanza.
  *
- * Falla cerrado, no ruidoso: lanzar una excepción al cargar el módulo rompería
- * también `next build`, que fija NODE_ENV=production incluso en local.
+ * En un build de producción —que es lo que corre `next start`, también cuando
+ * alguien levanta la app en su propia máquina— se agrega una condición que
+ * NADIE puede olvidarse de apagar: la petición tiene que venir de la misma
+ * máquina. El día que la app quede publicada en un dominio, el login de
+ * desarrollo se apaga solo.
+ *
+ * Es más fuerte que la regla anterior, que simplemente lo mataba en producción:
+ * aquella dejaba cualquier despliegue local sin ninguna forma de entrar, y este
+ * proyecto todavía no tiene Supabase Auth conectado.
+ *
+ * Se miran TRES cabeceras, y ninguna sobra:
+ *
+ *   host              el destino que pidió el cliente
+ *   x-forwarded-host  el destino original si hubo un proxy en el camino
+ *   x-forwarded-for   la dirección del par de la conexión
+ *
+ * Next.js escribe las dos últimas en toda petición, tenga proxy o no, así que
+ * su mera presencia no prueba nada: lo que importa es su VALOR. Sin proxy,
+ * x-forwarded-for trae la dirección real del socket (127.0.0.1); detrás de un
+ * reverse proxy trae primero la IP pública del cliente, y ahí la condición
+ * falla, que es exactamente lo que se busca.
+ *
+ * Queda un hueco residual, y conviene decirlo en vez de fingir que no existe:
+ * un proxy en la MISMA máquina que además borre las cabeceras x-forwarded y
+ * reescriba Host a localhost pasaría el control. Es una configuración
+ * deliberada y rara; si el proyecto llega a esa topología, el camino correcto
+ * es conectar Supabase Auth y sacar APP_AUTH_DEV, no endurecer esta función.
+ *
+ * Falla cerrado, no ruidoso: lanzar al cargar el módulo rompería `next build`,
+ * que fija NODE_ENV=production incluso en local.
  */
-export function modoDevActivo(): boolean {
-  const pedido = process.env.APP_AUTH_DEV === '1'
-  if (pedido && process.env.NODE_ENV === 'production') {
-    console.error(
-      '[sesion] APP_AUTH_DEV=1 en producción: el login de desarrollo queda ' +
-        'DESACTIVADO. Configura Supabase Auth y quita la variable.',
-    )
-    return false
-  }
-  return pedido
+export async function modoDevActivo(): Promise<boolean> {
+  if (process.env.APP_AUTH_DEV !== '1') return false
+  if (process.env.NODE_ENV !== 'production') return true
+
+  const cabeceras = await headers()
+  const host = cabeceras.get('host')
+  const hostOriginal = cabeceras.get('x-forwarded-host')
+  const parConexion = cabeceras.get('x-forwarded-for')?.split(',')[0] ?? null
+
+  const local =
+    esLocal(host) &&
+    (hostOriginal === null || esLocal(hostOriginal)) &&
+    (parConexion === null || esLocal(parConexion))
+
+  if (local) return true
+
+  console.error(
+    '[sesion] APP_AUTH_DEV=1 con una petición que no viene de esta máquina ' +
+      `(host: ${host ?? '-'}, origen: ${hostOriginal ?? '-'}, ` +
+      `par: ${parConexion ?? '-'}): el login de desarrollo queda DESACTIVADO. ` +
+      'Configura Supabase Auth.',
+  )
+  return false
 }
 
 function secreto(): string {

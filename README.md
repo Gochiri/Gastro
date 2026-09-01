@@ -12,25 +12,65 @@ salió de la heladera.
 
 ## Puesta en marcha
 
-Requiere PostgreSQL 16. No hace falta Supabase para desarrollar ni para correr
-los tests: las migraciones son las mismas, y un shim local reproduce el contrato
-de `auth.uid()`.
+Requiere Node >= 20 y PostgreSQL >= 14. No hace falta Supabase para desarrollar
+ni para correr los tests: las migraciones son las mismas, y un shim local
+reproduce el contrato de `auth.uid()`.
 
 ```bash
 npm install
+./scripts/local.sh      # http://localhost:3000
+```
 
-# arrancar un Postgres local (una vez por sesión)
-PGDATA=/var/lib/postgresql/gastro
-su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $PGDATA -U postgres --auth=trust"
-su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PGDATA -o '-p 5433 -k /tmp' -l /tmp/pg.log start"
+Eso es todo. El script crea un cluster de PostgreSQL **dentro del repo**
+(`.postgres/`, en su propio puerto) para no tocar el que ya tengas instalado,
+aplica las migraciones, carga el restaurante de ejemplo, genera `.env.local` con
+un secreto de sesión nuevo, compila y levanta el servidor de producción.
 
-./scripts/db.sh reset   # aplica migraciones + seed
-cp .env.example .env.local && $EDITOR .env.local
-npm run dev             # http://localhost:3000
-npm test                # SQL + contexto de tenant + E2E
+| Variante | Qué hace |
+|---|---|
+| `./scripts/local.sh` | Build de producción, que es lo que se despliega |
+| `./scripts/local.sh --dev` | `next dev`, con recarga en caliente |
+| `./scripts/local.sh --sin-datos` | Solo el seed, sin el escenario de ejemplo |
+
+**Recrea la base en cada corrida.** No lo apuntes a datos que te importen.
+
+Para pararlo: `Ctrl-C` el servidor, y `pg_ctl -D .postgres stop` PostgreSQL.
+
+### Entrar
+
+No hay contraseñas: la pantalla de login lista los usuarios del seed y se entra
+con un clic. Están las dos organizaciones y los cinco roles, que es lo que hace
+falta para ver el aislamiento entre clientes funcionando de verdad.
+
+**Ese login solo responde a peticiones que salen de tu propia máquina.** No es
+una variable de entorno que haya que acordarse de apagar: la app mira el `Host`
+y la dirección del par de la conexión, así que el día que quede publicada en un
+dominio el login de desarrollo se apaga solo. La contracara: tampoco vas a poder
+entrar desde el celular por la IP de la LAN.
+
+### Pasos manuales, si preferís
+
+```bash
+./scripts/db.sh reset            # crea la base, migraciones y seed
+node scripts/escenario.mjs       # el escenario de ejemplo (opcional)
+cp .env.example .env.local       # completar DATABASE_URL y APP_SESSION_SECRET
+npm run dev                      # o: npm run build && npm start
 ```
 
 ### Suites
+
+| Comando | Qué prueba |
+|---|---|
+| `npm test` | Todo lo de abajo, contra `next dev` |
+| `npm run test:humo` | Un build de **producción** real: compila, levanta `next start` y recorre la app entrando por la pantalla de login |
+
+`test:humo` va aparte a propósito. Corriendo contra `next dev` pasaría igual —y
+esa es la razón para separarlo: pasaría sin haber probado lo que dice probar. Ya
+encontró dos cosas que `next dev` no muestra: la pantalla de login quedaba
+cacheada como estática con la lista de usuarios vacía, y el login de desarrollo
+se apagaba en producción sin dejar ninguna forma de entrar.
+
+### Suites por separado
 
 | Comando | Qué prueba |
 |---|---|

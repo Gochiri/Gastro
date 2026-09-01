@@ -21,7 +21,7 @@ export interface UsuarioDev {
  * creada y esta función nunca se llama (requiere APP_AUTH_DEV=1).
  */
 export async function listarUsuariosDev(): Promise<UsuarioDev[]> {
-  if (!modoDevActivo()) return []
+  if (!(await modoDevActivo())) return []
   const filas = await consultar<Record<string, string>>(
     null,
     'select usuario_id, organizacion, rol from app_dev_usuarios()',
@@ -34,7 +34,7 @@ export async function listarUsuariosDev(): Promise<UsuarioDev[]> {
 }
 
 export async function entrarComo(formData: FormData): Promise<void> {
-  if (!modoDevActivo()) {
+  if (!(await modoDevActivo())) {
     throw new Error('El login de desarrollo está desactivado.')
   }
   const usuarioId = String(formData.get('usuarioId') ?? '')

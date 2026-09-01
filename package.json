@@ -8,6 +8,7 @@
     "start": "next start",
     "test:db": "./scripts/test.sh",
     "test:e2e": "playwright test",
+    "test:humo": "./scripts/humo.sh",
     "test": "npm run test:db && npm run test:unit && npm run test:datos && npm run test:e2e",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test --test-concurrency=1 tests/numeros.test.mjs tests/csv.test.mjs",

@@ -158,3 +158,15 @@ separadas por archivo). Cada archivo que escribe en la base la recrea en su
 42. **Antes de escribir cualquier gráfico se carga la skill `dataviz`**, y la
     paleta se valida con su script en vez de estimarla a ojo.
 43. **No se codifica con color lo que la posición ya codifica.**
+
+## Reglas de despliegue
+
+44. **El login de desarrollo se apaga por sí solo fuera de la máquina local.**
+    En un build de producción exige que `Host`, `x-forwarded-host` y el primer
+    valor de `x-forwarded-for` sean de loopback. No depende de que nadie se
+    acuerde de cambiar `APP_AUTH_DEV`.
+45. **Un cambio que toque el arranque se prueba con `npm run test:humo`**, no
+    solo con la suite normal: `next dev` no prerrenderiza ni fija
+    NODE_ENV=production, y ahí ya se escondieron dos errores.
+46. **`scripts/local.sh` no toca el PostgreSQL del sistema:** crea su propio
+    cluster dentro del repo, en su propio puerto.

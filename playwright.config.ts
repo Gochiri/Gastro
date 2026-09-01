@@ -12,6 +12,11 @@ const executablePath = existsSync(CHROMIUM_LOCAL) ? CHROMIUM_LOCAL : undefined
 
 export default defineConfig({
   testDir: './e2e',
+  // La prueba de humo necesita un build de producción corriendo, no `next dev`:
+  // se ejecuta aparte, con `npm run test:humo`. Si corriera acá pasaría igual,
+  // y esa es justamente la razón para excluirla — pasaría sin haber probado lo
+  // que dice probar.
+  testIgnore: '**/humo-produccion.spec.ts',
   // Un solo worker, no negociable: las suites comparten UNA base de datos y
   // varias la recrean en su beforeAll. `fullyParallel: false` solo serializa
   // los tests dentro de cada archivo; sin `workers: 1`, Playwright corre
